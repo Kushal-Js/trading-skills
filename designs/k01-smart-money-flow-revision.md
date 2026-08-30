@@ -1,142 +1,177 @@
-# Design: revisiting K01's Stage 3 (stock selection) and order-placement approach — Smart Money Flow Cloud
+# Design: K01 v2 — retest-based entries (Option C), enhanced with existing trading-skills findings
 
-**Status: proposal, not built.** Triggered by the user supplying the
-"Smart Money Flow Cloud [BOSWaves]" Pine Script indicator (30 Aug 2026)
-and asking to revisit K01's stock-selection and order-placement approach
-in light of it. See `../learnings/technical-patterns/smart-money-flow-cloud.md`
-for the full mechanism breakdown this proposal builds on — read that first,
-this file assumes it.
+**Status: proposal, not built — explicitly design/skill-building phase
+only.** Per the user's own framing (30 Aug 2026): "We won't deploy anything
+for paper trading, first we will work on our skill set, have some perfect
+strategy created." No `K01/paper_engine.py` or `config.py` changes until
+this design is backtested and explicitly approved for a build pass.
 
-This follows the same discipline `k01.md` itself was built under: design
-and get explicit agreement on scope before touching `K01/paper_engine.py`
-or `K01/config.py`. K01 is paper-only and currently disabled
-(`K01_STRATEGY_ENABLED=false`), so nothing here carries real-money risk —
-but it still shares Dhan REST/process infrastructure with the live
-Options/Futures strategies (see `k01.md`'s shared-infrastructure-risk
-finding), so a Stage 3 rewrite that changes call volume or timing still
-needs the same rate-limit reasoning applied before re-enabling.
+**Supersedes the "pick one of A/B/C" framing of this file's first version**
+(git history) — the user chose **Option C** (retest-based entries), with
+instruction to layer in the rest of this repo's existing findings on top,
+not use it in isolation. This version is the actual concrete design, not a
+menu of options.
 
-## What's actually being reconsidered
+## Read this first: the realistic target is not "no loss"
 
-Two separate things, and they should be decided somewhat independently:
+The user's stated goal was "very clear signals... and almost no loss."
+**No options strategy achieves that, and it's worth saying plainly rather
+than quietly inheriting an impossible bar.** Two reasons, both already on
+record in this repo:
 
-1. **Stock/entry selection (Stage 3)** — currently `momentum_signal()`
-   requires ALL FOUR of: 5-min RSI in a directional band, 5-min close vs. a
-   *fixed*-multiplier Supertrend(10,3), a 1-min Supertrend crossover, and
-   5-min ROC sign agreement. None of these scale with how much real
-   volume/conviction is behind the move.
-2. **Order placement / entry timing** — currently single-shot: one entry
-   per symbol, blocked from re-entry while a position is open
-   (`_check_watchlist_for_entries`'s `if symbol in _open_positions: continue`),
-   triggered only at the instant all four Stage 3 conditions first agree.
+1. **Genuine liquidity gaps are unpreventable, not a monitoring bug.**
+   `learnings/exit-mechanics.md`'s SAGILITY case: entry 2.29, cap 2.19, the
+   real market printed 2.25 → 2.14 with *zero trades in between* — no
+   possible exit logic could have done better than react to the first
+   post-gap tick. This can happen to a perfectly-designed strategy on a
+   thin contract; it's a liquidity property of the instrument, not a flaw
+   in the signal.
+2. **Even the cleanest real backtest so far still lost sometimes.**
+   DanDanaDan-2's 3-day backtest (`learnings/dandanadan-vs-kaashvi-3day-
+   backtest.md`) — the best result measured in this codebase — had a 77.4%
+   win rate, not 100%: 2 of 31 trades hit MAX_LOSS_HIT.
 
-## Option A — Money-flow strength as an added filter (smallest change)
+**The actual, checkable target this design aims at**: beat that existing
+77.4%-win-rate / 2-MAX_LOSS_HIT-in-31 benchmark on a real backtest, via
+tighter entries and stricter liquidity gating — not eliminate losses
+outright. Treat "win rate" and "MAX_LOSS_HIT frequency" on a real CSV/Dhan
+backtest as the metrics that settle whether this design actually improved
+anything, the same way `learnings/backtest-methodology.md`'s standard
+workflow already does for every other screener change in this repo.
 
-Keep Stage 3 exactly as-is, but require the Smart Money Flow Cloud's
-`strength` reading (the volume-weighted CLV ratio, boosted by `mfPower`)
-to clear a threshold (e.g. ≥0.4) at signal time, as a fifth AND-condition.
+## The core mechanic (Option C, concretized)
 
-- **Pro**: minimal surface area — one new computed value, one new
-  threshold config, no change to entry/exit timing logic at all.
-- **Con**: doesn't actually use the adaptive-band regime-flip idea, which
-  is arguably the more interesting part of the indicator — this is really
-  just "add a volume-conviction filter," which could be done without
-  porting the whole indicator (a plain Chaikin-Money-Flow style check would
-  do the same job).
+Replace Stage 3's current "enter the instant all four conditions first
+agree" (a flip-chasing entry, by construction already priced away from the
+baseline) with a **retest-based entry**: wait for an established regime,
+then enter on the pullback-to-baseline, not the initial flip. Per
+`learnings/technical-patterns/smart-money-flow-cloud.md`'s mechanism
+breakdown, this means:
 
-## Option B — Replace the dual-Supertrend regime check with the adaptive band (moderate change)
+1. **Regime establishment** — an adaptive-multiplier band (money-flow
+   strength scales the ATR multiplier, replacing the current fixed
+   Supertrend(10,3) — this folds in what was "Option B" in the prior
+   version of this doc; B and C aren't actually separable, since C's retest
+   concept only exists relative to B's adaptive band) flips bullish/bearish.
+   **Don't enter on the flip itself** — record it and wait.
+2. **Retest confirmation** — price pulls back to touch/cross the trend
+   baseline (`bs.bC`) without the regime itself flipping. This is the entry
+   trigger. Rationale: entry price is close to the baseline, so the natural
+   stop (a regime flip) is a *small* move away — meaningfully better
+   risk/reward geometry than entering right after a flip, where price is
+   already displaced from baseline by construction.
+3. **Money-flow strength gate at the retest bar** (folds in "Option A") —
+   require `strength ≥ 0.4` (tune via backtest) at the retest bar itself,
+   not just at the original flip. Rationale: a retest on collapsing volume
+   is a warning sign the move is running out of conviction, not a clean
+   pullback-and-continue setup — this is exactly the distinction the
+   indicator's own nonlinear boost is trying to surface.
+4. **Existing Stage 0/Stage 1 gates unchanged** — Trend Template (daily
+   structural quality) and the liquidity/anti-SAGILITY floor stay exactly
+   as they are. These are the two checks doing the actual "avoid a
+   catastrophic loss" work (a thin, structurally-weak name is dangerous
+   regardless of how good the intraday entry signal is) — nothing about
+   Option C changes that reasoning, so don't touch them.
 
-Swap `_compute_supertrend(h5, l5, c5, period=10, multiplier=3.0)` for a new
-adaptive-band function whose multiplier scales with money-flow strength
-(`minMult`→`maxMult` per the indicator's own formula) instead of being
-fixed at 3.0. Keep RSI band and ROC sign as-is; the 1-min crossover check
-would need to reference the new adaptive band too for consistency.
+## Scale-ins — the order-placement half of Option C
 
-- **Pro**: this is the indicator's actual core idea, not just a bolt-on
-  filter — bands widen during genuine volume-backed moves (fewer
-  premature regime flips) and tighten during noise (faster exit from a
-  low-conviction position). Directly addresses the "revisit the approach"
-  framing, not just "add one more gate."
-- **Con**: changes Stage 3's exit-relevant Supertrend parameters away from
-  matching `Options/config.py`'s own exit-side Supertrend(10,3) — the exact
-  mismatch `krishvi.md` flagged as a real problem when Krishvi's screener
-  used period-7 instead of the bot's period-10. Needs a deliberate answer:
-  is Stage 3's job "predict what the bot's OWN exit logic would call
-  bullish" (argues for keeping period/mult matched to production) or
-  "predict a genuinely different, hopefully better regime-detection
-  signal" (argues for letting it diverge)? This wasn't an issue before
-  because Stage 3 used the bot's own parameters verbatim; adopting an
-  adaptive multiplier means it can no longer match by construction.
+Allow **one** additional entry into an already-open symbol (cap: 2 total
+entries per symbol, per side) if:
+- A second retest fires while the regime is still intact for that symbol,
+  AND
+- The existing position is **currently favorable** (mark price ≥ its own
+  entry price) — this is the load-bearing safety rule. **Never scale into
+  a position that's currently underwater** — that's averaging down, the
+  single most common way a "smart" pyramiding rule turns into a much
+  bigger loser than a flat single entry would have been. Only pyramid into
+  strength.
+- Capacity allows it (`MAX_CONCURRENT_CE`/`_PE` counts each entry
+  separately, not each symbol — two entries on one symbol consume two of
+  the four/whatever slots).
 
-## Option C — Use "retest" as the actual entry trigger, not the flip (bigger change, touches order placement)
+**Each entry is tracked as its own fully independent sub-position** — own
+entry price, own target/SL/highest_price/trailing state — rather than
+averaging into one combined position. Simplest to reason about, and avoids
+inventing new averaging-math that the existing `_exit_reason_for`/dynamic-
+SL logic was never designed around.
 
-The retest signal (price pulling back to the trend baseline while regime
-holds) is arguably a **better** entry than the raw flip: a flip crossover
-happens after price has already cleared the ATR-scaled band — by
-definition already a real move away from basis — whereas a retest is
-priced close to the baseline, offering better risk/reward (tighter
-stop-to-entry distance) and confirms the trend is intact rather than
-brand new and unproven. This would mean:
+**Shared regime-exit rule**: if the adaptive-band regime flips *against*
+direction for a symbol, close **every** open sub-position for that symbol
+immediately, regardless of each one's individual target/SL/PROFIT_
+PROTECTION state. A regime flip means the premise every entry on that
+symbol was made under (this trend is intact) is now false — waiting for
+each sub-position's own price-based exit to catch up independently is
+strictly worse than reacting to the regime signal directly, since the
+regime flip is available as a first-class signal already.
 
-- Entering on retest instead of (or in addition to) flip, which changes
-  `_check_watchlist_for_entries`'s trigger condition itself.
-- Potentially allowing a **second** entry into a symbol already
-  in-position, if a retest fires while the original position is still
-  open (a genuine scale-in) — this needs an explicit decision, since
-  today's capacity model (`reserve_symbol`-equivalent's `if symbol in
-  _open_positions: continue`) treats one open position per symbol as a
-  hard block by design, and scale-ins interact with
-  `MAX_LOSS_PER_TRADE_RS`/`highest_price`-based trailing logic in ways that
-  need their own reasoning (which position's `highest_price` governs the
-  combined size? does a second entry get its own independent target/SL, or
-  average into the first?).
+## Cross-referencing the rest of this repo, per the user's instruction
 
-- **Pro**: potentially meaningfully better entries and a genuine second
-  opportunity per name per day, not just a filter tweak.
-- **Con**: real complexity increase in `PaperPosition`/entry bookkeeping,
-  and — importantly — since K01 is a paper strategy meant to validate
-  ideas cheaply, this is exactly the kind of change worth testing in
-  isolation (paper) before ever considering it for the real Options
-  strategy. Recommend building and testing Option A or B first, in a
-  separate iteration, before taking on Option C's added complexity.
+- **`learnings/intraday-options-trading/greeks-and-decay.md`**: retest
+  entries sit closer to the baseline than flip entries, meaning a smaller
+  expected move is needed to reach target — shorter expected holding time
+  reinforces why ATM (not ITM/OTM) stays correct: ATM's gamma/liquidity
+  advantage matters more than ever when the intended hold is short, and
+  theta bleed over a short hold stays small regardless.
+- **`learnings/intraday-options-trading/liquidity-and-execution.md`**: this
+  file already flagged that the premium/lot-size anti-SAGILITY proxy
+  doesn't catch every thin-liquidity case (a specific strike can be thin
+  even at a moderate premium/lot-size). **Given scale-ins increase total
+  exposure per name, this gap matters more under this design than it did
+  before** — recommend pulling a real OI/volume floor on the specific ATM
+  contract (K01's own deferred Stage 2, needs the Dhan Option Chain API)
+  forward in priority, ahead of building scale-ins, rather than after.
+- **`learnings/intraday-options-trading/timing-patterns.md`**: the
+  last-30-minutes window is flagged as weakest for a *new* entry. Recommend
+  applying an entry-time cutoff specifically to retest/scale-in entries
+  (e.g. no new entries after 15:00 IST) even though K01's current
+  `ENABLE_TRADING_TIME_LIMIT`-equivalent isn't on for the live bot — a
+  scale-in fired at 15:10 has little runway before `SQUARE_OFF_TIME`
+  (15:15) to reach target, which works directly against the "fewer, better
+  losers" goal.
+- **`learnings/exit-mechanics.md`**: the shared regime-exit rule above is
+  a direct application of this file's own finding that a signal-driven exit
+  (Supertrend flip) can and should act independently of price-threshold
+  exits, rather than waiting for MAX_LOSS_HIT/target to catch up.
+- **`learnings/screener-analysis/dandanadan-2.md` /
+  `kaashvi-28.md`**: both confirm (now with real backtest numbers) that
+  *fewer, better-confirmed* entry conditions beat *more, weaker* ones on
+  win rate and MAX_LOSS_HIT frequency. Retest-plus-strength-gate is exactly
+  the same philosophy — trading entry frequency for entry quality — applied
+  to K01 instead of to which Chartink screener to trust.
 
-## Recommendation
+## What this design deliberately does NOT change
 
-Start with **Option B** (replace the fixed Supertrend multiplier with the
-money-flow-adaptive one) as the core Stage 3 revision — it's the
-indicator's actual idea, is a contained change (one new pure function next
-to the existing `_compute_rsi`/`_compute_atr`/`_compute_roc`/
-`_compute_supertrend` helpers), and is directly testable against the
-existing CSV backtest methodology (`../learnings/backtest-methodology.md`)
-before ever touching live-adjacent config. Treat Option C (retest-based
-entries / scale-ins) as a distinct, later iteration once B has actual
-paper-trading or backtest evidence behind it — not something to bundle into
-the same change.
+- Stage 0 (Trend Template) and Stage 1 (liquidity/anti-SAGILITY floor) —
+  unchanged, still hard gates before a symbol is even watchlisted.
+- `PAPER_TRADING_ONLY` — stays true; this whole design is for paper
+  validation, per the user's own framing this session.
+- Target/stop-loss/dynamic-SL/PROFIT_PROTECTION mechanics themselves — this
+  design changes *when* an entry happens and *how many* can exist per
+  symbol, not what closes a position once open.
 
-## Open questions needing the user's decision before implementation
+## Before any code gets written
 
-1. **Which option (A/B/C, or a combination) to actually build first?**
-   Recommendation above is B alone, C deferred.
-2. **If B: does Stage 3's Supertrend deliberately diverging from the bot's
-   own exit-side Supertrend(10,3) matter?** (See Option B's con above —
-   this was a solved problem before; adopting an adaptive multiplier
-   reopens it.)
-3. **Timeframe**: keep the existing 5-min regime + 1-min crossover
-   two-timeframe structure, or consolidate to a single timeframe now that
-   the adaptive band is a different mechanism than the current fixed one?
-4. **Money-flow lookback/smoothing/power parameters** — the indicator's own
-   defaults (`mfLen=24`, `mfSmooth=5`, `mfPower=1.2`, `minMult=0.9`,
-   `maxMult=2.2`) are TradingView chart-timeframe defaults (commonly daily
-   or hourly charts) — they likely need re-tuning for K01's 5-min bars,
-   the same way `SUPERTREND_5MIN_PERIOD`/`_MULTIPLIER` were deliberately
-   set to match production rather than a scan's own untuned defaults.
-5. **Validate via CSV backtest before any live-adjacent config change** —
-   per the same discipline used for the DanDanaDan-2/Kaashvi-28 comparison
-   (`../learnings/dandanadan-vs-kaashvi-3day-backtest.md`), any Stage 3
-   revision should be measurable against real historical data before it
-   ever runs against K01_STRATEGY_ENABLED=true, even in paper mode.
+1. **Backtest first.** Per `learnings/backtest-methodology.md`'s standard
+   workflow: implement the adaptive-band + retest + strength-gate logic as
+   pure functions (mirroring `_compute_rsi`/`_compute_atr`/`_compute_roc`),
+   then replay against real historical 5-min/1-min Dhan data for a
+   multi-day window, comparing win rate / MAX_LOSS_HIT frequency /
+   P&L-per-trade against the existing DanDanaDan-2 benchmark (77.4%/2/31,
+   ₹1,063 per trade) before this ever touches `K01/paper_engine.py` for
+   real.
+2. **Tune the money-flow parameters for K01's actual bar sizes** — the
+   indicator's own defaults (`mfLen=24`, `mfSmooth=5`, `mfPower=1.2`,
+   `minMult=0.9`, `maxMult=2.2`) were not chosen for 5-min bars
+   specifically; re-tune the same way `SUPERTREND_5MIN_PERIOD`/
+   `_MULTIPLIER` were deliberately matched to production rather than
+   inherited from a Chartink scan's own untuned defaults.
+3. **Decide the OI/volume-floor question above** (pull Stage 2 forward or
+   not) before scale-ins specifically, since that's the piece most directly
+   addressing exposure risk once more than one entry per symbol is possible.
 
 ## Next step
 
-Waiting on the user's answer to the open questions above before writing
-any `K01/paper_engine.py` or `K01/config.py` changes.
+Waiting on: which piece to prototype and backtest first (recommend the
+adaptive-band + retest + strength-gate as a single-entry-per-symbol
+backtest first — validate the entry-quality improvement in isolation
+before adding scale-ins' extra complexity on top).
