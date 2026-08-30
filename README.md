@@ -18,6 +18,11 @@ re-deriving everything from scratch each time.
 - **`incidents/`** — case studies of specific real trades/days worth
   remembering in detail (a surprising loss, a mechanism that wasn't obvious,
   a screener/bot mismatch). One file per incident, dated.
+- **`designs/`** — proposals for new tools/skills before they're built:
+  goal, data sources, open questions that need the user's decision. Marked
+  `Status: proposal, not built` (or updated once built) at the top. This is
+  where a bigger idea gets refined *before* code gets written, so the build
+  starts from an agreed plan instead of assumptions.
 - **`SAFETY.md`** — the non-negotiable operating boundary. Read this first.
 
 ## What this repo is for
