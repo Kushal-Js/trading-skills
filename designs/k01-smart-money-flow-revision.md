@@ -169,9 +169,60 @@ regime flip is available as a first-class signal already.
    not) before scale-ins specifically, since that's the piece most directly
    addressing exposure risk once more than one entry per symbol is possible.
 
+## Update, 31 Aug 2026 — first real backtest run, prototype validated, sample too small to judge
+
+Built the pure functions (money-flow strength, adaptive band, regime,
+retest-with-cooldown) and sanity-checked them against real Dhan 5-min data
+across 4 stocks/days before trusting them in a backtest — this caught a
+real bug in the prototype itself: without a cooldown, one shallow chop
+(ZYDUSLIFE, 27 Aug) fired 5 "retests" on 5 consecutive bars for what is
+obviously one pullback event, not five. Fixed by porting Pine's own
+`dotCooldown` concept (4 bars here, vs. its default 12, for 5-min bars —
+untuned starting point).
+
+Ran the **real K01 universe scan** (not an external CSV) — Stage 0+1
+against all 210 F&O stocks using K01's own production functions verbatim,
+then the new retest logic against the 8-stock resulting watchlist over
+26–28 Aug 2026. First run showed 0/210 candidates passing anything — this
+was a real bug (Dhan rate-limit collapse on unpaced anti-SAGILITY calls),
+not a real result; see `../learnings/dhan-rate-limit-every-call-site.md`
+for the full diagnosis and the generalizable lesson it produced. Fixed and
+re-run: **34/210 passed Stage 0+1** (a plausible, non-degenerate rate),
+watchlist capped to 8 by ATR% exactly as production would.
+
+**Phase 2 result: only 3 trades** across those 8 stocks over 3 days —
+MANAPPURAM PE +₹7,650 (TARGET_HIT), OFSS PE −₹1,680 (MAX_LOSS_HIT in 4
+minutes flat), SAIL PE −₹987 (EOD_SQUARE_OFF). Win rate 33.3%, ₹1,661/trade
+average. **This is not being reported as "beats" or "loses to" the
+DanDanaDan-2 benchmark (77.4% win, ₹1,063/trade) — n=3 is an anecdote, not
+a sample.** One trade (MANAPPURAM) accounts for the entire net P&L; a
+different tick on that single trade flips the read entirely. The low count
+is expected given the design's own intent (retest entries are deliberately
+rarer than flip entries — fewer, better-confirmed signals was the whole
+point) compounded by only 8 watchlist stocks × 3 days = 24 stock-days
+scanned, far fewer opportunities than the Chartink-alert-driven DanDanaDan/
+Kaashvi backtests had (which drew from a wider, alert-triggered set of
+names each day rather than one frozen 8-stock watchlist).
+
+**What this run DOES establish**: the full pipeline works end-to-end (real
+universe → real Stage 0/1 → real retest signals → real exits via K01's own
+`_exit_reason_for`), produces plausible non-degenerate trades, and the
+prototype's cooldown/strength-gate logic behaves sensibly on real data.
+**What it does NOT establish**: whether K01 v2 actually beats the existing
+benchmark — that needs a multi-week backtest window to get a trade count
+worth trusting, not a 3-day one.
+
+**User's decision (31 Aug 2026): hold here.** Document the findings (this
+update, plus the rate-limit lesson) and pause before spending more Dhan
+calls on a longer run — revisit later. Prototype files
+(`k01_v2_indicators.py`, `k01_v2_universe_backtest.py`) live in this
+session's scratchpad only, not committed to either repo yet — they're
+still throwaway/iterating, not production code.
+
 ## Next step
 
-Waiting on: which piece to prototype and backtest first (recommend the
-adaptive-band + retest + strength-gate as a single-entry-per-symbol
-backtest first — validate the entry-quality improvement in isolation
-before adding scale-ins' extra complexity on top).
+On hold per the user's own instruction. When resumed: the next real step
+is a multi-week backtest (not a parameter change) to get a trade count
+large enough to actually compare against the DanDanaDan-2 benchmark — a
+3-day window structurally cannot answer that question regardless of how
+the strength threshold or cooldown gets tuned.
