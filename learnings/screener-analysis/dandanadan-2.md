@@ -27,3 +27,13 @@ Daily % Change floor, the (functionally inert, duplicated) drawn-pattern OR-grou
 ## Backtest correlation
 
 This screener's real 3-day backtest (`03 DanDanaDan-1 Day.csv`, 26–28 Aug 2026) produced 31 closed trades, 77.4% win rate, +32,944.70 — the cleanest win rate of any CSV backtested this session, with only 2 MAX_LOSS_HIT out of 31. Whether that's attributable to the looser OR-trigger catching genuinely different (and better-performing, in this sample) setups than Krishvi's AND-trigger, or is just a small-sample coincidence, isn't established — would need a much larger backtest sample directly comparing the two screeners' alert quality to say anything confident. Worth flagging as an open question rather than a conclusion.
+
+**Update, 30 Aug 2026**: a head-to-head backtest against Kaashvi-28 over
+this exact same 3-day window (`../dandanadan-vs-kaashvi-3day-backtest.md`)
+found DanDanaDan-2's 77.4% win rate and ₹1,063/trade P&L clearly ahead of
+Kaashvi-28's 56.0% win rate and ₹436/trade, despite Kaashvi generating far
+more raw P&L on 5x the trade volume. This is the first quantitative
+confirmation that the "AND vs OR" structural difference documented above
+(this screener's tighter multi-condition entry trigger vs. Kaashvi-28's
+reduced single-condition trigger) actually shows up in trade quality, not
+just in the filter tree.

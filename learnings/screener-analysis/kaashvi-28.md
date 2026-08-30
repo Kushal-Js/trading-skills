@@ -48,3 +48,14 @@ config variants) showed solid but not exceptional results (~56–61% win
 rate depending on config) — consistent with a screener whose entry trigger
 leans on fewer confirming signals than its sibling. Same caveat as
 `dandanadan-2.md`: not established as causal from this sample size alone.
+
+**Update, 30 Aug 2026**: `03 Kaashvi - 1 day.csv` (26–28 Aug 2026, the same
+3 days as a head-to-head DanDanaDan-2 backtest) produced 150 closed
+trades, 56.0% win rate, +₹65,359.05 — 5x DanDanaDan-2's trade count over
+the identical window, but only 56.0% win rate vs DanDanaDan-2's 77.4%, and
+MAX_LOSS_HIT alone cost −₹62,021 across 37 trades (vs DanDanaDan-2's
+−₹2,469 across just 2). Full head-to-head:
+`../dandanadan-vs-kaashvi-3day-backtest.md`. This is now the second
+independent 3-day sample landing in the same 56–61% win-rate band as the
+`02 Kaashvi.csv` runs above — the weak-entry-trigger finding is holding up
+across separate datasets, not a one-off.
