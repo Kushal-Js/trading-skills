@@ -24,8 +24,44 @@ explicitly-decided step, not a side effect of building this).
 | Options OI, IV, Greeks per strike | [Dhan Option Chain API](https://dhanhq.co/docs/v2/option-chain/) — `POST https://api.dhan.co/v2/optionchain` | **New** — not used anywhere in the bot today |
 | Futures OI + volume + depth | [Dhan Market Quote API](https://dhanhq.co/docs/v2/market-quote/) — `https://api.dhan.co/v2/marketfeed/quote` | **New** |
 | Historical OI (yesterday's EOD OI, for the buildup comparison) | Dhan's historical-data endpoint's optional `oi` parameter (per Dhan's release notes) | **New**, confirm exact request shape while building |
+| ~252 trading days of daily OHLC per stock (needed for Stage 0's 200-day MA + 52-week high/low) | Same `historical_daily_data` call, wider date range than `bt_common.py`'s typical short backtest windows | **Already available as an API call** — but note this is meaningfully more data per stock than anything fetched so far this session; factor into the rate-limit pacing plan below |
 
-## Pipeline (four stages, in order)
+## Pipeline (now five stages — Stage 0 added 30 Aug 2026)
+
+### Stage 0 — Daily-chart trend/base quality pre-filter (NEW)
+
+Added after building out `learnings/technical-patterns/` (Minervini Trend
+Template, VCP, classic continuation patterns). Runs **before** Stage 1,
+on **daily** candles (not intraday) — a slower, structural filter answering
+"is this underlying even worth watching today," ahead of the faster
+liquidity/momentum stages below.
+
+1. **Trend Template pass** (`learnings/technical-patterns/
+   minervini-trend-template.md`) — all 8 criteria: price above 50/150/200-
+   day MAs, 150-day above 200-day, 200-day rising ≥1 month, close ≥30%
+   above 52-week low, close within 25% of 52-week high. Reject outright if
+   any fail — same all-or-nothing logic as Stage 1's liquidity floor, for
+   the same reason (institutional-grade trend structure isn't a
+   partial-credit property).
+2. **VCP presence, as a bonus signal not a hard gate** (`learnings/
+   technical-patterns/vcp.md`) — among Trend-Template passers, flag ones
+   currently showing a tightening contraction sequence (each contraction
+   smaller and lower-volume than the last, final contraction depth
+   preferably <10%) with an identifiable pivot price. This is a genuinely
+   non-trivial detection algorithm (finding swing highs/lows, measuring
+   sequential contraction depth/volume) — **not a hard gate at launch**,
+   because it's real, careful code to get right and shouldn't block the
+   whole screener's first working version. Ship Stage 0 with just the
+   Trend Template gate first; add VCP detection as a scored bonus
+   (+weight in Stage 4, or a "🎯 VCP setup" flag in the output) once it's
+   been built and tested on its own, separately.
+
+This explicitly does **not** replace Stage 3's intraday momentum stack
+(5-min/1-min Supertrend, ROC) — Stage 0 decides *which underlyings* are
+structurally worth watching; Stage 3 still decides *when intraday* to
+actually flag one as a candidate. Conflating the two timeframes was the
+exact mistake flagged in both technical-patterns files: VCP/Trend-Template
+are weeks-long daily-chart signals, not intraday triggers.
 
 ### Stage 1 — Liquidity/volatility floor (reject before ranking)
 
