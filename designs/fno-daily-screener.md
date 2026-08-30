@@ -1,10 +1,22 @@
 # Design: daily F&O stock screener skill
 
-**Status: design finalized, ready to build.** Written 30 Aug 2026 after web
-research + applying lessons already in `learnings/`. Every threshold/weight
-below is a concrete decision with stated rationale, not a placeholder —
-if a later backtest shows one is wrong, update this file and say why,
-per the repo's own style guide, rather than silently changing the number.
+**Status: MVP built and deployed, 30 Aug 2026 — first live paper-trading
+test starts 31 Aug 2026.** Implementation lives in `traderBoy`'s
+`FnoScreener/` package (paper-trading only, mirrors `IndexScalping`/
+`CopperOptions`'s existing pattern), not in this repo — see that repo's
+`README.md`/`NOTES.md` entry #39 for the code-level details. This file
+stays the design record; update it if a later test shows a threshold/
+weight below needs to change, per the repo's own style guide, rather than
+silently changing the number.
+
+**MVP scope vs. this design:** Stages 0 (Trend Template only — the VCP
+scored-bonus half is deferred) and 1 (liquidity floor) and 3 (intraday
+momentum) are built. **Stage 2 (OI-buildup gating) is deferred** — it
+needs a brand-new Dhan Option Chain integration that's never been used in
+this codebase before, and wasn't made load-bearing on the very first live
+test until it can be built and verified on its own. Until Stage 2 ships,
+entries are momentum-only (Stage 3's four conditions must self-agree,
+rather than also requiring OI-buildup agreement as designed below).
 
 ## Goal
 
