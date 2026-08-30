@@ -56,7 +56,7 @@ that reason, but its *role* changes:
   in a strong enough structural uptrend to be worth watching for an
   intraday CE entry today at all" — narrowing the ~208-stock F&O universe
   down before any of the faster, intraday-scale signals (5-min RSI/
-  Supertrend/ROC, already in `designs/fno-daily-screener.md`) get applied.
+  Supertrend/ROC, already in `designs/k01.md`) get applied.
 - The natural place for this in the F&O screener design is a **Stage 0**,
   ahead of the existing Stage 1 liquidity floor — see that file for the
   update.

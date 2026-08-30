@@ -75,7 +75,7 @@ intraday holding period. The right way to use it here:
   sequence on a 5-minute chart is just short-term noise, not the same
   phenomenon.
 - The actual **intraday entry trigger** stays what's already designed in
-  `designs/fno-daily-screener.md`'s Stage 3 (5-min/1-min Supertrend
+  `designs/k01.md`'s Stage 3 (5-min/1-min Supertrend
   crossover, ROC) — VCP's role is upstream of that, narrowing down *which*
   stocks are worth running the intraday trigger logic on, alongside (or
   combined with) the Trend Template's own pre-filter.
