@@ -1,8 +1,8 @@
 # Backtest methodology: what `bt_common.py` actually replicates, and its real limits
 
 Applies to: any CE ATM options backtest run against a Chartink CSV export
-using `traderBoy/bt_common.py` (repo-root, untracked) plus a per-CSV runner
-script.
+using `traderBoy/bt_common.py` (repo-root, versioned as of 30 Aug 2026 —
+commit 20498cf) plus a per-CSV runner script.
 
 ## What's faithfully real, not simulated
 
