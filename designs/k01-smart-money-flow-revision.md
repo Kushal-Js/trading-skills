@@ -219,10 +219,50 @@ calls on a longer run — revisit later. Prototype files
 session's scratchpad only, not committed to either repo yet — they're
 still throwaway/iterating, not production code.
 
+## Update, 31 Aug 2026 — diagnosed the all-PE/zero-CE result, resumed research
+
+User noticed the 3-trade result was all PE and asked specifically "what
+about CE?" Diagnosed properly rather than guessed — see
+`../learnings/intraday-options-trading/momentum-entry-conditions-
+research.md` for the full writeup. Short version:
+
+- **Not a bug.** Raw retest geometry (before the strength gate) was
+  balanced: 44 CE vs 48 PE across the dataset. The strength gate
+  (`strength_min=0.4`) is what filtered every CE retest out — CE-side
+  strength topped out around 0.24-0.29 all sample, PE occasionally
+  cleared 0.40-0.42.
+- **Checked, not assumed, why**: Nifty itself closed down on 2 of the 3
+  backtest days (26 Aug -0.55%, 27 Aug -0.77%, 28 Aug +0.22%) — a
+  genuinely weak broad-market stretch during exactly this window. K01 has
+  no index-level regime filter anywhere in its pipeline, so this went
+  completely unaccounted for.
+- **Ruled out a tempting wrong explanation**: cross-market research shows
+  India is one of the few markets where price RISES faster than price
+  FALLS (opposite the "panic selling is always sharper" folk wisdom) — so
+  "of course PE dominates, down-moves are always higher-volume" is NOT a
+  safe explanation for this market specifically, even though it sounds
+  plausible.
+
+Three concrete follow-ups identified, in priority order: (1) add a
+Nifty-above-its-own-50-day-SMA regime filter — now a *confirmed*, not
+speculative, factor in this exact result; (2) try Relative Volume (RVOL,
+time-of-day-adjusted, direction-agnostic) as an alternative or parallel
+confirmation to the signed money-flow-strength gate, since RVOL can't
+develop the same one-sided skew by construction; (3) restrict
+`find_retest_entries` to the FIRST qualifying retest per regime only, not
+every one after a cooldown — directly grounded in pullback-trading
+literature ("only trade the first pullback, not the second or third"),
+and this also tightens the case against Option C's scale-in-on-second-
+retest idea, since a second pullback is empirically lower-probability,
+not equally good.
+
 ## Next step
 
-On hold per the user's own instruction. When resumed: the next real step
-is a multi-week backtest (not a parameter change) to get a trade count
-large enough to actually compare against the DanDanaDan-2 benchmark — a
-3-day window structurally cannot answer that question regardless of how
-the strength threshold or cooldown gets tuned.
+Still on hold per the user's standing instruction (30 Aug 2026: "we won't
+deploy anything for paper trading, first we will work on our skill set").
+When resumed: build the Nifty-regime filter first (now confirmed
+relevant, not speculative), then a multi-week backtest — a 3-day window
+structurally cannot produce a trustworthy CE/PE comparison regardless of
+threshold tuning, and now there's a concrete, evidence-backed reason
+(market regime) to account for before trusting whatever that backtest
+shows.
