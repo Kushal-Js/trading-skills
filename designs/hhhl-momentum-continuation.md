@@ -145,15 +145,16 @@ recommend production deployment as currently parameterized.**
 4. Investigate the MOTHERSON data gap before treating the 21-symbol
    result as fully representative of the 22-symbol live watchlist.
 
-## Unrelated but important discovery made getting this backtest's daily
-context data
+## Unrelated discovery made getting this backtest's daily context data — CORRECTED, was a false alarm
 
-See `learnings/dhan-charts-historical-endpoint-broken.md` — Dhan's
-`/v2/charts/historical` (daily candles) endpoint is currently rejecting
-EVERY request for this account with `DH-905`, regardless of
-`instrument_type`/date-range tried. This is the SAME endpoint
-`traderBoy`'s own live daily watchlist prune
-(`Swing/trading_engine.py._fetch_daily_closes_once`) depends on — worth
-checking directly in `traderBoy` since that feature fails open by design
-and would show no visible error even if it's been silently doing nothing
-since it was deployed (1 Sep 2026).
+See `learnings/dhan-charts-historical-endpoint-broken.md` for the full
+story. Original suspicion: Dhan's `/v2/charts/historical` (daily candles)
+endpoint looked like it was rejecting every request for this account with
+`DH-905`. **Verified directly against the live `traderBoy` droplet a few
+hours later and it was fine** — the real cause was a stale local access
+token producing a misleading `DH-905` instead of a clear auth error on
+this one endpoint. Swing's live daily watchlist prune
+(`_fetch_daily_closes_once`) was never actually affected. The resampled-
+from-5-min approach this backtest used for daily context (point 3 above)
+remains a fine, deliberate choice on its own merits — just not one forced
+by a broken endpoint.

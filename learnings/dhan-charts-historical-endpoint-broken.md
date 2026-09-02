@@ -1,70 +1,60 @@
-# Dhan's `/v2/charts/historical` (daily candles) endpoint is currently broken for this account
+# CORRECTED 2 Sep 2026: `/v2/charts/historical` was NOT broken — a stale local token produced a misleading error
 
-Found 2 Sep 2026, while fetching daily-context data for the HH/HL
-momentum-continuation backtest (`designs/hhhl-momentum-continuation.md`) —
-a real, currently-live issue, not a backtest-only concern.
+**Update, same day, a few hours later**: the original finding below (found
+2 Sep 2026 while backtesting `designs/hhhl-momentum-continuation.md`) was
+**wrong about the root cause**. Verified directly against the live
+`traderBoy` droplet — `Swing/trading_engine.py._fetch_daily_closes_once`
+(the exact production function) returned a clean, correct 63-daily-candle
+result for RELIANCE, and a raw call to the same endpoint from the droplet
+returned `status: success` with real OHLCV data. **The endpoint itself is
+fine, and Swing's live daily watchlist prune is NOT affected** — kept
+below as the corrected record rather than deleted, per this repo's own
+style guide ("update what changed and why, don't just delete the
+history").
 
-## What's broken
+**What actually caused the original symptom**: re-testing locally with a
+FRESH token reproduced success immediately — the local session's cached
+access token had gone stale (`pin_totp` mode's own token cache) between
+the original test run and this recheck. The stale token produced
+`DH-905 Input_Exception: "Missing required fields, bad values for
+parameters etc."` on this specific endpoint — **a misleading error
+message for what was actually an auth problem** (compare: an expired
+token on other Dhan calls, and even a bad-TOTP retry seen elsewhere this
+session, surface a clear `DH-906 Invalid Token` instead). That's the
+genuinely reusable finding here: **if `/charts/historical` ever returns
+DH-905 again, check token freshness FIRST before assuming a payload
+problem** — this endpoint doesn't necessarily report auth failures the
+same way the rest of the API does. This is exactly why several payload
+variations (`instrument_type` casing, `expiryCode`/`oi` presence,
+different date ranges) all failed identically in the original
+investigation below — none of them were the actual variable; the token
+was already stale before any of that testing started.
 
-`dhanhq`'s `historical_daily_data()` (→ POST `/v2/charts/historical`) — the
-DAILY-candle endpoint, distinct from `intraday_minute_data()` (→ POST
-`/charts/intraday`, confirmed working fine, tested up to 90 days back at
-both 1-min and 5-min intervals) — returns `DH-905 Input_Exception:
-"Missing required fields, bad values for parameters etc."` for **every**
-request tried against this account, regardless of:
+**Practical consequence for future investigation**: don't conclude a Dhan
+endpoint is "broken" from a local ad-hoc script's failure alone,
+especially one whose own auth session has been sitting idle across a long
+work session — re-authenticate fresh (or check `Token validity:` in the
+login log line against the current time) before trusting a payload-level
+diagnosis, and cross-check directly against the live droplet's own
+process when a finding would otherwise get flagged as a live-production
+risk.
 
-- `instrument_type` (`EQUITY`, `Equity`, `equity`, `STOCK`, `EQ` all
-  identical failure)
-- date range (5, 10, 15, 30, 60, 90+ days back — all identical failure)
-- whether `expiryCode`/`oi` are included, omitted, or set to their SDK
-  defaults
-- calling via the SDK vs. a raw `requests.post` directly against
-  `https://api.dhan.co/v2/charts/historical` with the exact same payload
-  (ruling out an SDK-level bug — confirmed genuine HTTP 400 from Dhan's
-  own server)
+---
 
-Confirmed against a definitely-valid, liquid, actively-traded symbol
-(RELIANCE, security_id 2885) — not a delisted/illiquid/wrong-ID issue.
+## Original finding (2 Sep 2026, root cause was wrong — see correction above)
 
-## Why this matters for `traderBoy`
+Found while fetching daily-context data for the HH/HL momentum-
+continuation backtest. `historical_daily_data()` (→ POST
+`/v2/charts/historical`) appeared to return `DH-905 Input_Exception` for
+every request tried against this account, regardless of
+`instrument_type`, date range, or whether `expiryCode`/`oi` were included
+— confirmed (at the time) via both the SDK and a raw `requests.post`
+directly against Dhan's own endpoint with the identical payload, which
+seemed to rule out an SDK-level bug. It did not — it ruled out a
+*payload* bug specifically, while the real cause (a stale token) was
+never controlled for across those tests.
 
-`Swing/trading_engine.py._fetch_daily_closes_once` calls this EXACT same
-endpoint with this exact same parameter shape, and is the data source for
-the daily watchlist prune feature (added 1 Sep 2026 — see `traderBoy`'s
-own NOTES.md entry #77). That function's own docstring already documents
-it fails open (`return None`) on any fetch error, which the daily prune
-tick then treats as "nothing to prune this run" — **no exception, no log
-line distinguishable from an ordinary transient hiccup, nothing that would
-have surfaced this as an active problem.** Given this endpoint's failure
-looks structural (not transient — every single parameter permutation
-failed identically), it's plausible the daily trend-based watchlist prune
-has been silently doing nothing since deployment.
-
-**Not yet verified directly against the live `traderBoy` droplet** — this
-was found via a separate local backtest script authenticating against the
-same Dhan account, not by testing the droplet's own running process. The
-natural next step (flagged to the user, not yet actioned) is checking
-`traderBoy`'s own logs/behavior directly, or calling
-`_fetch_daily_closes_once` against a real watchlist symbol from the
-droplet itself, before concluding the live feature is actually affected.
-
-## What still works (don't assume the whole historical/quote API is down)
-
-- `intraday_minute_data()` (`/charts/intraday`) — both 1-min and 5-min,
-  confirmed working normally up to ~90 days back.
-- `get_ohlc_data()` (used by `get_today_open_and_prev_close` /
-  `get_day_change_pct`) — a different, quote-style endpoint, not the
-  charts/historical one, unaffected.
-
-So this is specific to the `/charts/historical` (daily OHLC) endpoint
-only, not a broader Dhan API outage or an account-wide auth problem.
-
-## Open
-
-Whether this is a genuine Dhan-side outage (worth retrying in a few days
-before spending more time on it) or a permanent API change that needs a
-different payload shape than the current `dhanhq` SDK version sends.
-Given several straightforward payload variations were already tried
-without success, the productive next step if this needs fixing is
-checking Dhan's own current API docs/changelog for `/v2/charts/historical`
-specifically, rather than more guess-and-check payload permutations.
+`intraday_minute_data()` (`/charts/intraday`) and `get_ohlc_data()`
+worked fine throughout the original investigation — consistent with the
+corrected finding, since neither of those happened to be exercised with
+the same stale token in the same window.
