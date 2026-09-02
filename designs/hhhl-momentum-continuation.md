@@ -1,11 +1,13 @@
 # Design + backtest: HH/HL momentum-continuation re-ranking signal
 
-**Status: Backtested, 2 Sep 2026 — result is a WEAK, not clearly
-deployable edge as currently parameterized.** Not wired into production
-(`traderBoy`'s `Swing/momentum_signal.py` holds the implementation,
-backtest-only, no import from `trading_engine.py` yet). User's own framing
-throughout: "show me results first... then we will think of deploying it
-or not based on profits or higher profitability signal detection."
+**Status: Backtested AND parameter-tuned, 2 Sep 2026 — tuning did NOT
+rescue this into a deployable signal; if anything it surfaced a reason
+for MORE caution, not less (see "Parameter sweep" section below).** Not
+wired into production (`traderBoy`'s `Swing/momentum_signal.py` holds the
+implementation, backtest-only, no import from `trading_engine.py` yet).
+User's own framing throughout: "show me results first... then we will
+think of deploying it or not based on profits or higher profitability
+signal detection" / "tune the parameters and re-test."
 
 ## The idea (user's own words, 2 Sep 2026)
 
@@ -120,30 +122,83 @@ Read-only, real Dhan data, no order placement — same discipline
   measure winner/loser magnitude — worth doing before any further
   decision) rather than something this new signal changes.
 
+## Parameter sweep (`traderBoy/backtest_momentum_signal_tune.py`, same day, user request: "tune the parameters and re-test")
+
+Reused the exact same 782 real entry-signal events already found (fully
+independent of any momentum-score parameter — only the SCORING varies),
+and swept 36 configurations: fractal `k` ∈ {2, 3, 4}, coil/baseline
+window ∈ {(8,40), (12,60), (16,80)}, and 4 weight profiles (default,
+coil-heavy, RVOL-heavy, freshness-heavy).
+
+**Two findings, and they point in opposite directions — reported both
+rather than picking whichever looks better:**
+
+1. **A genuine, non-noisy pattern**: `k=2` beat every single `k=3`/`k=4`
+   configuration on population-wide correlation (12/12 — every k=2 row
+   outranked every k=3/k=4 row). Best: `k=2, coil/baseline=8/40,
+   weights=rvol_heavy` → correlation **+0.071** (up from the original
+   pass's +0.061, using default weights and k=2 already) — a small
+   improvement, still a weak correlation in absolute terms. Its same-day
+   horse race at this exact configuration: **50.9%** — a coin flip.
+
+2. **The metric that matters most for the actual use case (same-day
+   "which candidate should Swing pick") does NOT track correlation at
+   all.** The single best horse-race result across all 36 configs was
+   **67.3%** (`k=3, coil/baseline=16/80, weights=fresh_heavy`, n=55
+   days) — but that same configuration's population correlation is
+   **NEGATIVE (−0.018)**, and its own high-tercile average return
+   (+0.06%) is WORSE than its low-tercile average (+0.21%) — i.e. by the
+   bucket-average metric, this "best horse race" config's own high scores
+   would have picked the WORSE performer on average, exactly backwards
+   from what a working signal should do.
+
+**This divergence is itself the headline finding, and it's a caution
+sign, not a green light.** Scanning 36 configurations and reporting
+whichever one hits 67.3% on a 55-day sample is exactly the shape of a
+multiple-comparisons/overfitting artifact (out of 36 tries, SOME
+configuration hitting notably above/below 50% by chance alone is
+expected even with zero real underlying skill) — not evidence of a real,
+generalizable edge. A genuinely robust signal should show the SAME
+horse-race-favoring config also correlating positively and showing a
+sensible bucket-average ordering; this one does neither.
+
 ## Honest read
 
-A small, directionally-consistent improvement exists (higher score →
-somewhat better average forward return, and a modest edge in the direct
-"which one should Swing have picked" test), but the effect size here is
-weak and the parameters (k=2, the four component weights, the coil/RVOL
-windows) are all untuned defaults, not a fit result — this is a first
-pass, not a tuned final answer. **Not compelling enough on its own to
-recommend production deployment as currently parameterized.**
+Tuning did not rescue this into a deployable signal. The one robust
+finding (k=2 outperforms k=3/4 on correlation, consistently) is real but
+small (+0.061 → +0.071, still a weak correlation by any standard) and
+doesn't come with a correspondingly strong same-day horse-race result at
+that same setting (50.9%, a coin flip). The config that DOES show a
+strong horse-race number fails the correlation and bucket-ordering checks
+badly enough to read as noise from scanning many configurations on a
+modest (55-57 day) sample, not a real edge. **Still not compelling enough
+to recommend production deployment, and the tuning pass itself is a
+caution against trusting a single flattering metric out of a parameter
+sweep without checking it holds up under a second, independently
+meaningful metric too.**
 
-## Before concluding further (not yet done)
+## Before concluding further
 
-1. Sweep `k` (3, 4) and the coil/baseline window sizes — k=2 is quite
-   permissive (90% of entries qualify), which could be diluting the
-   signal; a stricter fractal definition might sharpen the tercile
-   spread.
-2. Separately measure average winner size vs average loser size per
-   bucket, not just win rate and mean return — a trend-following signal
-   can have real edge that a bare win-rate comparison undersells.
+1. ~~Sweep `k` (3, 4) and the coil/baseline window sizes~~ **— done, see
+   "Parameter sweep" above.** Result: no configuration cleared the bar on
+   both correlation AND same-day horse race at once.
+2. ~~Separately measure average winner size vs average loser size per
+   bucket~~ **— done.** At the best-by-correlation config: low tercile
+   avg_winner +1.12%/avg_loser −0.64%, high tercile avg_winner
+   +1.79%/avg_loser −0.73% — the high tercile's winners ARE meaningfully
+   bigger (not just a marginally-better win rate), which is the one
+   genuinely encouraging data point in the whole exercise, but it rides
+   on the same weak (+0.071) correlation as everything else here, so
+   weight it accordingly rather than as decisive on its own.
 3. This was ONE historical window (last ~90 days) — same caution
    `learnings/backtest-methodology.md` already gives for any single-CSV
-   backtest result generalizes here too.
+   backtest result generalizes here too. Still not done, and now the
+   single most likely next step to actually move this forward (a longer
+   window, or a different market regime) given tuning alone didn't
+   settle it.
 4. Investigate the MOTHERSON data gap before treating the 21-symbol
-   result as fully representative of the 22-symbol live watchlist.
+   result as fully representative of the 22-symbol live watchlist. Still
+   not done.
 
 ## Unrelated discovery made getting this backtest's daily context data — CORRECTED, was a false alarm
 
