@@ -1,13 +1,16 @@
 # Design + backtest: HH/HL momentum-continuation re-ranking signal
 
-**Status: Backtested AND parameter-tuned, 2 Sep 2026 — tuning did NOT
-rescue this into a deployable signal; if anything it surfaced a reason
-for MORE caution, not less (see "Parameter sweep" section below).** Not
-wired into production (`traderBoy`'s `Swing/momentum_signal.py` holds the
-implementation, backtest-only, no import from `trading_engine.py` yet).
-User's own framing throughout: "show me results first... then we will
-think of deploying it or not based on profits or higher profitability
-signal detection" / "tune the parameters and re-test."
+**Status: ON HOLD, 2 Sep 2026, user's own words: "keep this on hold."**
+Backtested AND parameter-tuned first — tuning did NOT rescue this into a
+deployable signal; if anything it surfaced a reason for MORE caution, not
+less (see "Parameter sweep" section below). Not wired into production
+(`traderBoy`'s `Swing/momentum_signal.py` holds the implementation,
+backtest-only, no import from `trading_engine.py`). "On hold" means
+parked, not abandoned — the code and this writeup stay as-is for a future
+revisit (e.g. with a longer backtest window, per its own "before
+concluding further" section), not deleted. The user's own next move was
+"explore a different signal idea" instead — check this folder for a
+newer design file covering that thread.
 
 ## The idea (user's own words, 2 Sep 2026)
 
