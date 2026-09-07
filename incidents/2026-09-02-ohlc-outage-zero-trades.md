@@ -76,10 +76,15 @@ were no new entries to manage).
 - Not yet checked whether this is a known Dhan-side incident from their
   own status page/support channel for that date - worth checking if this
   recurs.
-- No code change made or recommended yet - this reads as a genuine
-  external outage that resolved on its own by the next day, not a bug in
-  `traderBoy`'s own logic. A possible, not-yet-actioned enhancement: a
-  circuit-breaker/longer-backoff after N consecutive `get_ohlc_data`
-  failures, purely to cut log volume during a sustained outage like this
-  one (78K near-identical ERROR lines in a day) - not a correctness fix,
-  since the fail-safe behavior itself was already correct throughout.
+- This reads as a genuine external outage that resolved on its own by
+  the next day, not a bug in `traderBoy`'s own logic - the fail-safe
+  behavior itself was already correct throughout. **Queued as a
+  corrective action item, user's own instruction 7 Sep 2026 ("we will
+  get this done with other items while deploying later")**: a circuit-
+  breaker/longer-backoff after N consecutive `get_ohlc_data` failures,
+  purely to cut log volume and add observability for a sustained outage
+  like this one (78K near-identical ERROR lines in a day, indistinguishable
+  from a quiet market day on any dashboard) - not a correctness fix.
+  Tracked in `traderBoy`'s own `NOTES.md`, "Corrective action items
+  queued for a future deploy" section - batched with other pending items
+  rather than deployed in isolation.
