@@ -182,3 +182,98 @@ and don't assume it's broken just because options SL-M was.
    exercise behavior gated by a flag, pin that flag explicitly in the
    test itself, never rely on whatever the code/env default currently
    happens to be.
+
+## Resolution (same day, 9 Sep 2026): SL-L (STOP-LOSS LIMIT) confirmed working
+
+The user's own follow-up question drove the fix: "why are we placing
+SLM orders? We can calculate the SL order based on max loss protection
+limit after a buy order is successfully placed using limit orders only,
+search online and let me know your findings."
+
+### Root cause of the SL-M failure: an NSE regulation, not a Dhan bug
+
+Research (Dhan's own support docs + the well-documented 2021 NSE
+circular history) confirmed: **NSE discontinued SL-M orders for
+index/stock OPTIONS exchange-wide on 27 September 2021**, specifically
+to stop "freak trade" exploitation of stop orders sitting in thin
+option order books (a real cited case: a Nifty CE premium spiking
+Rs.80->Rs.800 in one second wiped out every resting SL-M below it).
+This applies across **every** NSE-registered broker - Zerodha, Upstox,
+Dhan, all of them. Dhan's own support docs confirm it in plain language:
+"stop-loss market order which gets executed immediately at the market
+price once triggered (**not allowed in options as per exchange**)."
+Dhan's API doesn't surface this as a clean rejection though - it
+silently lets the order fall through to something that behaves like an
+immediately-marketable LIMIT sell, which is exactly the bug documented
+above. **SL-L (STOP_LOSS, stop-limit) is the only broker-side
+conditional stop the exchange still permits for options.**
+
+Important nuance worth remembering: "just place a plain LIMIT order
+after computing the stop price" (the user's own first instinct) is
+NOT the fix by itself - a bare LIMIT SELL below the current market
+price fills INSTANTLY (that's literally the mechanism behind the SL-M
+bug above). The real fix needs the genuine STOP_LOSS order type: a
+`trigger_price` (where it activates) PLUS a separate `limit_price` (the
+worst price willing to be accepted once triggered) - two prices, not a
+plain order at one computed price.
+
+### A second real live-money bug found on the FIRST attempt to test the fix
+
+The very first controlled live test of the new SL-L order (COALINDIA
+PE, trigger=3.88, limit=3.76) was REJECTED by the exchange:
+`"EXCH:16283: The order price is not multiple of the tick size."`
+Unlike a normal order at a human-chosen price (naturally tick-aligned,
+or the order type doesn't care), a stop order's trigger/limit values
+are COMPUTED from a rupee-cap formula and a percentage buffer - they
+land on an arbitrary tick-misaligned value far more often than not.
+This was not a rare edge case; it was hit on the very first live
+attempt. Fixed by rounding both prices to the contract's real exchange
+tick size (Dhan's own `SEM_TICK_SIZE` field, expressed in paise) before
+submission, with a safe fallback (plain 2-decimal rounding) if the tick
+lookup itself fails.
+
+### A second controlled live test, after the tick fix, confirmed SL-L genuinely works
+
+Direct evidence, not an assumption:
+
+| field | SL-L (fixed) | SL-M (broken) |
+|---|---|---|
+| `orderType` | `STOP_LOSS` | `LIMIT` |
+| `orderStatus` | `PENDING` (genuinely resting) | `TRADED` (instant fill) |
+| `triggerPrice` | `3.85` (preserved correctly) | `0.0` (zeroed out) |
+
+The order sat genuinely inactive at the exchange, was cleanly
+cancellable, and the test position was correctly flat afterward - with
+**zero mistakes this time**, because every order call checked real
+broker position state before the next one (the direct, applied lesson
+from this incident's own lesson #4 above). Total real cost across both
+SL-L tests (the rejected one + the working one): roughly Rs.150-250,
+far cheaper than the original SL-M investigation's Rs.600-750, precisely
+because the state-checking discipline was already in place this time.
+
+### Additional lessons from the resolution
+
+6. **A user's proposed fix ("just use limit orders") can be RIGHT in
+   spirit but wrong in the literal mechanism** - the job isn't to
+   implement exactly what was suggested, it's to understand the
+   underlying need (a real conditional stop) and find the mechanism
+   that NSE's own rules actually permit for the instrument type in
+   question. A plain LIMIT order would have reproduced the exact same
+   bug under a different name.
+7. **Reasoning about a new mechanism's own failure modes BEFORE it ever
+   runs live is worth the extra work.** SL-L's ability to partially fill
+   (unlike SL-M's all-or-nothing observed behavior) was identified from
+   Dhan's own documentation, not from a live incident - the resulting
+   safety fix (re-deriving real broker quantity before any compensating
+   SELL) was already in place before the first real SL-L order was ever
+   placed, rather than being a second incident-driven patch.
+8. **A COMPUTED price (from a formula) needs different validation than
+   a human-chosen one.** Tick-size alignment is an easy thing to forget
+   when a price comes from arithmetic rather than a person looking at a
+   quote screen - and it will be wrong far more often than intuition
+   suggests, as demonstrated by hitting it on literally the first live
+   attempt.
+9. **Applying a lesson from the SAME session immediately paid off** -
+   the state-checking discipline adopted after the SL-M naked-short
+   mistake (lesson #4) directly prevented any repeat mistake during the
+   SL-L verification, at a fraction of the cost.
