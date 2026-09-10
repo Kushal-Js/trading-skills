@@ -170,11 +170,13 @@ gates the `if ltp >= position.target_price: return "TARGET_HIT"` branch in
 `_exit_reason_for`. Present in all three option packages so the
 Options/Futures engine copies stay byte-identical.
 
-**Deployed: OFF for all three real option strategies** -
-`FUTURES_ENABLE_TARGET_EXIT=false` (10 Sep AM), then
-`ENABLE_TARGET_EXIT=false` + `LUXURY_ENABLE_TARGET_EXIT=false` (10 Sep PM,
-user: "disable Target Hit in all strategies"). Swing has no target exit;
-K01 (paper) has its own separate `K01_TARGET_PCT` target, left untouched.
+**Deployed (as of 10 Sep 2026 PM): ON for all three at `TARGET_PCT=0.20`.**
+History same day: 0.25 ON → Futures OFF (AM) → all three OFF (PM, after the
+"₹0 effect" replay below) → all three back **ON at 0.20** (`TARGET_PCT` /
+`FUTURES_TARGET_PCT` / `LUXURY_TARGET_PCT` = 0.20, all three
+`ENABLE_TARGET_EXIT=true`; `.env`-only, no code change - the toggle from
+`fcbf1a5` is the off-switch). Swing has no target exit; K01 (paper) has
+its own separate `K01_TARGET_PCT`, left untouched.
 
 What "off" does: a winner is never closed just for touching
 `entry * (1 + TARGET_PCT)` (25%). It rides on to whatever fires next in
@@ -199,7 +201,10 @@ exit) *always* fires long before the premium is anywhere near +25%.
 TARGET_HIT is effectively unreachable dead code for realistic trades -
 it would only ever fire if a premium spiked +25% in a single tick before
 PP could arm on the prior tick. Disabling it removes that theoretical
-edge case and nothing else.
+edge case and nothing else. **Lowering to `TARGET_PCT=0.20` (deployed
+10 Sep PM) barely moves this** - a +20% move is still ~₹3,200–5,600,
+still well above the PP arm; expect it to keep firing rarely, mostly on
+fast one-tick spikes.
 
 **Corollary:** if the intent is genuinely to *let winners run further*,
 the lever is the **PP threshold** (`PROFIT_PROTECTION_THRESHOLD_RS_*`) or
