@@ -1,7 +1,12 @@
 # Capacity, ranking, and what actually gates a trade from happening
 
 Applies to: DhanBoy's Options package. `MAX_LIVE_POSITIONS_CE`/`_PE` and
-`TOP_N_STOCKS` as of 27–28 Aug 2026 (CE=4, PE=0, TOP_N=4; PE fully off).
+`TOP_N_STOCKS`. Live cap history: CE=4/PE=0/TOP_N=4 (27–28 Aug 2026, PE
+fully off) → CE=3/PE=0 (30 Aug) → CE=2/PE=2 (31 Aug, PE re-enabled, CE
+trimmed to keep combined exposure ~flat) → CE=1/PE=1 (1-per-side, some
+point after) → **CE=2/PE=2 (10 Sep 2026, user request "update Option max
+concurrent trade quota to 2" — `.env`-only change on the droplet, code
+default was already 2; up to 4 concurrent, 2 per side)**. `TOP_N_STOCKS=4`.
 
 ## Three separate things can block an alert from becoming a trade — don't conflate them
 
