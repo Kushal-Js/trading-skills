@@ -137,3 +137,27 @@ within tolerance - real PP exits are largely sub-minute events invisible to
 1-min candles, and 1-min Supertrend recompute + entry-candle alignment is
 rough. This is why the pure `replay[b] - replay[0]` delta (not
 replay-vs-real) is the trustworthy number here.
+
+## Broker SL-L vs bot tick-driven MAX_LOSS exit: bot wins on healthy days
+
+Tracked live across a full trading day (10 Sep 2026, `BROKER_STOP_LOSS_
+ENABLED=false` for Options - so pure tick-driven - with an SL-L equivalent
+computed for every real stop-out). All **8** MAX_LOSS_HIT/STOP_LOSS_HIT
+trades that day: the bot's tick-driven SELL got a **better price than a
+broker SL-L limit would have, on every single one**. SL-L total vs bot:
+**−₹4,175** (SL-L worse), i.e. the 3% `BROKER_STOP_LOSS_LIMIT_BUFFER_PCT`
+slippage consistently costs more than the poll/tick lag gives up.
+
+Matches the earlier `backtest_options_chartink_laxmi_02_sll.py` pessimistic
+result (−₹5,700 / −25% on that dataset's stop trades).
+
+The SL-L's only edge is disaster insurance - feed down, process wedged,
+premium gaps through the level between ticks. But 10 Sep's ICICIPRULI
+incident ([[2026-09-10-icicipruli-unmonitorable-position]]) shows that even
+when the feed *does* die, the SL-L wouldn't fire either - it needs the same
+live LTP the monitor lost.
+
+**Verdict: keep `BROKER_STOP_LOSS_ENABLED=false` for Options.** It's a net
+cost when monitoring is healthy and doesn't cover the case where it isn't.
+Re-evaluate only if a real "bot monitoring was down and a position ran
+away" incident happens.
