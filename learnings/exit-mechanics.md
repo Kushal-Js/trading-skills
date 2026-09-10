@@ -228,12 +228,50 @@ Supertrend signal):
   EMAs) - deliberately not built; it trades noise for speed and
   contradicts "of the 5-min close".
 
-Not backtested before enabling - it's a plain trend-follower exit on the
-same 5-min grid as the (backtested, kept) Supertrend exit, and it's on
-the Futures copy specifically so it can be measured against the Options
-original without touching that. Watch: does it exit good Futures trades
-early (same failure mode the Supertrend entry-candle skip was added for),
-and how often does it beat Supertrend to the exit vs just duplicate it.
+It's on the Futures copy specifically so it can be measured against the
+Options original without touching that. Watch: does it exit good Futures
+trades early (same failure mode the Supertrend entry-candle skip was added
+for), and how often does it beat Supertrend to the exit vs just duplicate it.
+
+### Backtest (`02 Krishvi.csv`, 25 Aug - 10 Sep 2026, 13 days, Futures config)
+
+Ran 10 Sep 2026, `backtest_futures_ema_cross_krishvi.py` (scratchpad).
+Deployed Futures config (no `TARGET_HIT`, windows, Friday square-off,
+EMA on the continuous 5-min series, crossover on the last fully-closed
+bar). Three passes, one canonical entry set:
+
+| Pass | Trades | Net P&L | vs baseline |
+|---|---:|---:|---:|
+| A - baseline (EMA_CROSS off) | 88 | +₹104,566 | - |
+| B - EMA on, SAME entries | 88 | +₹102,657 | **−₹1,910** |
+| C - EMA on, independent | 92 | +₹102,907 | **−₹1,660** |
+
+**EMA_CROSS_EXIT is mildly net-negative (~−1.8% over 13 days) and rarely
+triggers (6 of 88 trades).** Of the 6: it cut a loss earlier 3× (+₹2,613
+total) and cut a recovering winner 3× (−₹4,522) - SIEMENS
+PROFIT_PROTECTION +1,820 → EMA_CROSS −455; CDSL PP +1,591 → +166;
+SUPREMEIND Friday-square-off +586 → −236. Its own tag: 6 trades, −₹2,044,
+avg −₹341. B and C land within ₹250 of each other, so the "faster exits
+free capacity → more entries" side-effect is negligible here.
+
+This dataset exits 55-57/88 trades on PROFIT_PROTECTION within minutes, so
+the 5-min EMA cross seldom gets a turn - a longer-hold regime might differ.
+Verdict: **no evidence EMA_CROSS_EXIT adds value; keep it as the Futures
+live experiment only, do not extend to Options/Luxury.** The SIEMENS/CDSL
+"cut a PP winner into a loss" cases are the same failure mode the
+Supertrend entry-candle skip exists to limit.
+
+**Backtest-methodology note (bug found + fixed mid-analysis):** Dhan's
+5-min *equity* `intraday_minute_data` series ends at the **15:10 bar** (no
+15:15/15:20/15:25). A sim clock driven off the 5-min series goes blind
+after ~15:14 and skips the 15:15-15:30 window - so the Friday 15:20
+square-off never fired and Friday-afternoon PP/MAX_LOSS were never checked
+on the real 15:15-15:39 option prints. First run booked HINDALCO/VEDL
+weekend gaps as −₹5,180/−₹4,715 MAX_LOSS_HIT when both were actually
+flat-to-profitable at Friday's close. Fix: drive the sim clock off a full
+1-min grid (09:15-15:29) per trading day, not the 5-min timestamps. Every
+future backtest script must do the same. The option 1-min series does run
+to 15:39, so it was only the *clock* that was truncated.
 
 ## Continuous intraday history — every indicator, every strategy (no daily warm-up lag)
 

@@ -72,3 +72,28 @@ commit 20498cf) plus a per-CSV runner script.
    trusting only the script's own printed summary — this is what lets you
    regroup by day, by symbol, or by exit reason after the fact without
    re-running the backtest.
+
+## Sim-clock trap: Dhan 5-min equity candles stop at the 15:10 bar
+
+Found 10 Sep 2026 (Futures EMA-cross backtest). `intraday_minute_data` at
+`interval=5` for `NSE_EQ`/`EQUITY` returns bars only through **15:10**
+(72 bars, 09:15→15:10) — no 15:15/15:20/15:25 5-min bar, even though the
+equity session runs to 15:30. Any backtest that drives its simulation
+clock off the 5-min underlying timestamps goes blind after ~15:14 each day
+and skips the entire 15:15–15:30 window:
+
+- the **15:15 / Friday 15:20 square-off never fires** — a position entered
+  in the 14:00–15:28 zone-2 window "carries" overnight when it would
+  really have been force-closed;
+- **end-of-day PP / MAX_LOSS / trailing-SL are never checked** on the real
+  15:15–15:39 prints (the option 1-min series *does* run to ~15:39);
+- the first observed price becomes next morning's open, so a benign Friday
+  close + weekend gap gets booked as a huge MAX_LOSS_HIT that never
+  happened (real case: HINDALCO −₹5,180 / VEDL −₹4,715, both flat-to-
+  profitable at Friday's real close).
+
+**Fix, mandatory for every new backtest script:** build the sim clock as a
+full 1-minute grid `09:15..15:29` for every trading day with data, not
+from the 5-min timestamps. `bt_common.py` predates this finding — check
+its `master_ts` construction before trusting late-day / carried-position
+P&L from an older run.
