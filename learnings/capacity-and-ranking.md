@@ -105,3 +105,24 @@ what the bot's strategy *logic* would have done given those exact alerts; it
 does not tell you whether those exact alerts were ever actually delivered
 live. Treat backtest P&L as "what this logic does against this alert
 pattern," not as "what actually happened live."
+
+## Futures is now a full independent copy of Options (10 Sep 2026)
+
+`Futures/trading_engine.py` was made a **verbatim copy** of
+`Options/trading_engine.py` (user: "update Futures strategy same as
+Options ... 2nd independent Options copy") - only 9 lines differ (logger
+name + the strategy tags passed to `cross_strategy_registry` /
+`trade_history` / the reconcile owner check). Config (`FUTURES_`-prefixed)
+matched to Options exactly: **CE/PE caps 2/2**, TOP_N 4, target 0.25 / SL
+0.16, max-loss 1200/1000, PP 1500/1000, cooldown 20m, repeat-block 2,
+liquidity guard on, SL-L off, entry windows 09:15-11:00 + 14:00-15:28,
+MARGIN product, NRML carry (`ENABLE_SQUARE_OFF=false`). Added
+`/chartink/webhook-futures-sell` (PE) to mirror Options' CE+PE pair.
+
+**Combined live footprint now**: Options 2CE+2PE + Futures 2CE+2PE +
+Luxury 2CE+2PE = up to **12 concurrent option positions**, ALL drawing
+from the one shared **secondary fund bucket** (75% of available balance,
+[[project-fund-allocation-system]] in the traderBoy memory). That's the
+margin-exhaustion risk from the 10 Sep TECHM incident, tripled - worth
+watching real available margin closely, and consider whether 2/2/2/2/2/2
+is actually fundable or should come down.
