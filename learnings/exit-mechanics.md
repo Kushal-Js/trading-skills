@@ -170,27 +170,42 @@ gates the `if ltp >= position.target_price: return "TARGET_HIT"` branch in
 `_exit_reason_for`. Present in all three option packages so the
 Options/Futures engine copies stay byte-identical.
 
-**Deployed: `FUTURES_ENABLE_TARGET_EXIT=false`** (user request: "disable
-TARGET_HIT for Futures, rest to remain same"). Options and Luxury keep it
-`true`.
+**Deployed: OFF for all three real option strategies** -
+`FUTURES_ENABLE_TARGET_EXIT=false` (10 Sep AM), then
+`ENABLE_TARGET_EXIT=false` + `LUXURY_ENABLE_TARGET_EXIT=false` (10 Sep PM,
+user: "disable Target Hit in all strategies"). Swing has no target exit;
+K01 (paper) has its own separate `K01_TARGET_PCT` target, left untouched.
 
-What "off" does: a winning Futures position is never closed just for
-touching `entry * (1 + TARGET_PCT)` (25%). It rides on to whatever fires
-next in `_exit_reason_for`'s order - `PROFIT_PROTECTION_HIT` (peak >
-₹1,500/1,000 then any dip past the give-back buffer), the trailing +
-dynamic + hard SL, `SUPERTREND_EXIT`, the liquidity guard, or the 15:15 EOD
-square-off. `target_price` is still computed and stored (reconciliation /
-`/positions` display use it) - it's just no longer an exit trigger. The
-loss side (`MAX_LOSS_HIT`, all SLs) and every entry gate are untouched.
+What "off" does: a winner is never closed just for touching
+`entry * (1 + TARGET_PCT)` (25%). It rides on to whatever fires next in
+`_exit_reason_for`'s order - `PROFIT_PROTECTION_HIT` (peak > ₹1,500/1,000
+then any dip past the give-back buffer), the trailing + dynamic + hard SL,
+`SUPERTREND_EXIT`, the liquidity guard, or the EOD square-off.
+`target_price` is still computed/stored for display - just no longer an
+exit trigger. Loss side and entry gates untouched.
 
-Net effect to watch for as real Futures data accumulates: with the fixed
-target gone, **`PROFIT_PROTECTION_HIT` becomes Futures' primary profit-
-taking exit**. The zero-drawdown-tolerance PP finding above (give-back
-buffer is net-negative) now matters more for Futures than for Options -
-worth re-checking whether the ₹1,500/1,000 PP threshold is the right level
-once there's a Futures trade population to measure. This is effectively a
-live test of "let winners run vs. lock the +25%" on the second independent
-Options copy while the original keeps the fixed target.
+### Why disabling TARGET_HIT is a near no-op at current thresholds
+
+Replayed 10 Sep 2026's **28 real Options trades** through the exit ladder
+both ways (target on vs off), fixed real entries:
+
+- **0 of 28 trades changed. Isolated P&L effect: ₹0.**
+- Not one trade's premium reached +25% before its real exit.
+
+Structural reason: `TARGET_PCT=0.25` means a +25% premium move is worth
+**₹4,000–7,000** on every trade's lot size, while `PROFIT_PROTECTION`
+arms at just **₹1,000–1,500** of peak rupee profit. So PP (or a loss
+exit) *always* fires long before the premium is anywhere near +25%.
+TARGET_HIT is effectively unreachable dead code for realistic trades -
+it would only ever fire if a premium spiked +25% in a single tick before
+PP could arm on the prior tick. Disabling it removes that theoretical
+edge case and nothing else.
+
+**Corollary:** if the intent is genuinely to *let winners run further*,
+the lever is the **PP threshold** (`PROFIT_PROTECTION_THRESHOLD_RS_*`) or
+the **give-back buffer** (`PROFIT_PROTECTION_GIVEBACK_PCT`, backtested
+net-negative above), NOT the target toggle. `PROFIT_PROTECTION_HIT` is
+already the de-facto profit-taking exit for all three strategies.
 
 ## EMA_CROSS_EXIT: a second trend-reversal exit alongside Supertrend (Futures)
 
