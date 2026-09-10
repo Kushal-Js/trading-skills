@@ -7,7 +7,9 @@ trimmed to keep combined exposure ~flat) → CE=1/PE=1 (1-per-side, some
 point after) → CE=2/PE=2 (10 Sep AM) → CE=3/PE=3 (10 Sep midday) →
 **CE=2/PE=2 (10 Sep 2026, reverted; `.env`-only)**. `TOP_N_STOCKS=4`.
 Luxury's own `LUXURY_MAX_LIVE_POSITIONS_CE/_PE` tracked the same path and
-landed at 2/2 on 10 Sep too. There is still NO combined CE+PE total cap in
+landed at 2/2 on 10 Sep, then **trimmed to CE=1/PE=1 (10 Sep 2026,
+`.env`-only, user request)** — Luxury now carries the smallest footprint
+of the three. There is still NO combined CE+PE total cap in
 either package — `_cap_for()` / `reserve_symbol()` gate each type
 independently, so "caps at 2" means up to 4 concurrent (2 CE + 2 PE); a
 true total ceiling would need a new `MAX_LIVE_POSITIONS_TOTAL` primitive.
@@ -119,10 +121,27 @@ liquidity guard on, SL-L off, entry windows 09:15-11:00 + 14:00-15:28,
 MARGIN product, NRML carry (`ENABLE_SQUARE_OFF=false`). Added
 `/chartink/webhook-futures-sell` (PE) to mirror Options' CE+PE pair.
 
-**Combined live footprint now**: Options 2CE+2PE + Futures 2CE+2PE +
-Luxury 2CE+2PE = up to **12 concurrent option positions**, ALL drawing
-from the one shared **secondary fund bucket** (75% of available balance,
-[[project-fund-allocation-system]] in the traderBoy memory). That's the
-margin-exhaustion risk from the 10 Sep TECHM incident, tripled - worth
-watching real available margin closely, and consider whether 2/2/2/2/2/2
-is actually fundable or should come down.
+**Combined live footprint (10 Sep 2026)**: Options 2CE+2PE + Futures
+2CE+2PE + Luxury **1CE+1PE** = up to **10 concurrent option positions**,
+ALL drawing from the one shared **secondary fund bucket** (75% of
+available balance, [[project-fund-allocation-system]] in the traderBoy
+memory). Luxury was trimmed 2/2 → 1/1 the same day to pull the combined
+footprint back from 12. Still watch real available margin - the 10 Sep
+TECHM funds-rejected-exit risk scales with this total.
+
+## Product type: NRML (= "MARGIN") across every real-money strategy
+
+All four real strategies place orders with product **"MARGIN"**, which is
+Dhan-Tradehull's code for **NRML** / carry-forward (full span margin, no
+intraday leverage, no broker auto-square-off). Literal "NRML" is rejected
+by Tradehull's `order_placement()` - it only accepts
+MIS/MARGIN/MTF/CO/BO/CNC. "MIS" would be the leveraged intraday product.
+
+10 Sep 2026: the code defaults for `OPTIONS_PRODUCT` (Options) and
+`FUTURES_OPTIONS_PRODUCT` (Futures) were hardened from `"MIS"` → `"MARGIN"`
+(traderBoy commit `6f554bf`) so a dropped/typo'd `.env` line can't
+silently re-enable intraday leverage on real entries. Luxury and Swing
+already defaulted to MARGIN. No live change - deployed `.env` has always
+set MARGIN. Pairs with `ENABLE_SQUARE_OFF=false` (positions carry
+overnight) - see the NRML/overnight-gap risk in
+[[exit-mechanics]] and the ICICIPRULI incident.
