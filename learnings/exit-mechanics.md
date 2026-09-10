@@ -94,3 +94,46 @@ the worst case but, based on the same data, likely only shaves a handful of
 seconds off the already-fast outliers — not a dramatic change. Don't expect
 config changes here to produce large P&L swings; the mechanism was already
 fairly fast in practice.
+
+## PROFIT_PROTECTION_HIT: a give-back buffer is net-negative across the real trade population
+
+Investigated 10 Sep 2026 after a real Luxury OIL trade (entered 09:16:15
+IST, right into the opening spike, exited 13s later on PROFIT_PROTECTION_HIT
+@ 15.85 for +Rs.2,030) where OIL 505 CE then ran 14.40 -> 16.75 -> 18.9 ->
+21.2 within 4 minutes. The PP rule has zero drawdown tolerance: once peak
+unrealised profit crosses the Rs.1,500/1,000 threshold, it exits on the
+FIRST tick below the running peak (`ltp < highest_price`), even a 10-paise
+sub-minute wiggle.
+
+Built `PROFIT_PROTECTION_GIVEBACK_PCT` (Options + Luxury, env, default 0.0 =
+bit-identical to old) - PP fires only once `ltp < highest_price * (1 - pct)`.
+Backtested buffers 0/3/5/8/10% two ways:
+
+1. **Against only the 23 real PROFIT_PROTECTION_HIT trades** (Aug 31-Sep 10):
+   looked positive, ~+Rs.7-8k, because that subset is self-selected to
+   cases where holding longer tends to help.
+2. **Against all 87 real Options+Luxury closed trades**, using the
+   drift-immune metric `sum(replay[buffer] - replay[0])` (same 1-min engine
+   + data on both sides, so replay-vs-reality error cancels): **every buffer
+   level LOSES** - 3% -Rs.5,975, 5% -Rs.7,109, 8% -Rs.1,234, 10% -Rs.4,839.
+
+**Mechanism:** the buffer converts ~5 fast-momentum trades into TARGET hits
+(+Rs.2-5k each: MPHASIS, MAZDOCK, both FORCEMOT, the 10-Sep OIL) but gives
+back on ~18 trades where the option peaked then reversed (CAMS 1402->165,
+GVT&D 1494->-125, BLUESTARCO, DIVISLAB, PERSISTENT, MAHABANK, several
+supertrend trades). Option premiums mean-revert hard (theta + OTM decay),
+so the reversal give-backs outweigh the continuation captures.
+
+**Lesson:** the zero-tolerance PP is doing its job - locking small/medium
+gains before they evaporate. Don't add a blanket give-back buffer. If the
+opening-spike miss (OIL-style) needs addressing, use a TARGETED rule
+instead (e.g. "within X% of target -> let it run to target, skip PP" or
+"don't arm PP in the first 2-3 min after entry") that leaves the
+reversal-heavy midday trades alone. The feature/knob exists in code
+(commit 0645c1b in traderBoy, left at 0.0) for future experiments.
+
+Methodology caveat: the 1-min replay only reproduced 26/87 real exits
+within tolerance - real PP exits are largely sub-minute events invisible to
+1-min candles, and 1-min Supertrend recompute + entry-candle alignment is
+rough. This is why the pure `replay[b] - replay[0]` delta (not
+replay-vs-real) is the trustworthy number here.
