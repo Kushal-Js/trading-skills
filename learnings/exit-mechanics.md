@@ -338,3 +338,29 @@ regression reintroducing a today-only fetch.
   positions — the trend genuinely flipped. The per-position entry-candle
   skip still prevents a *fresh* intraday entry being whipsawed on its own
   entry bar.
+
+### Measured effect on one real trading day (10 Sep 2026)
+
+Replayed 10 Sep's 34 real Options+Luxury trades (which ran on the OLD
+today-only Supertrend) with today-only vs continuous 7-day Supertrend,
+same exit ladder both ways:
+
+| | Net P&L |
+|---|---:|
+| replay, today-only ST | +₹4,428 |
+| replay, continuous ST | +₹5,965 |
+| **isolated effect** | **+₹1,537** (6 of 34 trades differ) |
+
+**Mechanism, exactly as predicted:** all 6 changed trades exited
+`SUPERTREND_EXIT` at **10:25–10:55 IST** in the today-only run — the
+window where today-only Supertrend has only ~13–20 bars and the bands
+aren't seeded, so it reads bearish on marginal moves. Continuous ST
+(warm from the open) held 3 of them longer to a `PROFIT_PROTECTION_HIT`
+(BANKBARODA +614, POWERGRID +1,235, IREDA +1,900 vs baseline) and let 3
+others keep falling to `MAX_LOSS_HIT` (KALYANKJIL −608, IDFCFIRSTB
+−1,020, BANKBARODA −585). So it's **"less noisy," not strictly "better"** —
+it removes premature warm-up exits, and whether that helps depends on
+whether the position was actually reversing. Net +₹1.5k here, but the
+effect bit hard because 10 Sep happened to cluster 6 SUPERTREND exits in
+that 30-minute warm-up window; a day without that cluster would show
+near-zero. Small sample — one day, 6 trades.
