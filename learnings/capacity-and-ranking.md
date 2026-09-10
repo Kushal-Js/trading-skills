@@ -4,10 +4,13 @@ Applies to: DhanBoy's Options package. `MAX_LIVE_POSITIONS_CE`/`_PE` and
 `TOP_N_STOCKS`. Live cap history: CE=4/PE=0/TOP_N=4 (27–28 Aug 2026, PE
 fully off) → CE=3/PE=0 (30 Aug) → CE=2/PE=2 (31 Aug, PE re-enabled, CE
 trimmed to keep combined exposure ~flat) → CE=1/PE=1 (1-per-side, some
-point after) → CE=2/PE=2 (10 Sep 2026 AM) → **CE=3/PE=3 (10 Sep 2026,
-user asked for "max concurrent CE+PE to 3" then chose per-side=3 each when
-told there's no combined-total knob — so up to 6 concurrent, not 3;
-`.env`-only)**. `TOP_N_STOCKS=4`. There is NO combined CE+PE total cap in
+point after) → CE=2/PE=2 (10 Sep AM) → CE=3/PE=3 (10 Sep midday) →
+**CE=2/PE=2 (10 Sep 2026, reverted; `.env`-only)**. `TOP_N_STOCKS=4`.
+Luxury's own `LUXURY_MAX_LIVE_POSITIONS_CE/_PE` tracked the same path and
+landed at 2/2 on 10 Sep too. There is still NO combined CE+PE total cap in
+either package — each type is gated independently, so "caps at 2" means up
+to 4 concurrent (2 CE + 2 PE), and a real total ceiling would need a new
+`MAX_LIVE_POSITIONS_TOTAL` primitive. There is NO combined CE+PE total cap in
 the code — `_cap_for()` / `reserve_symbol()` gate each type independently;
 a true total ceiling would need a new `MAX_LIVE_POSITIONS_TOTAL` primitive.
 
