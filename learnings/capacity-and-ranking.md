@@ -8,11 +8,9 @@ point after) → CE=2/PE=2 (10 Sep AM) → CE=3/PE=3 (10 Sep midday) →
 **CE=2/PE=2 (10 Sep 2026, reverted; `.env`-only)**. `TOP_N_STOCKS=4`.
 Luxury's own `LUXURY_MAX_LIVE_POSITIONS_CE/_PE` tracked the same path and
 landed at 2/2 on 10 Sep too. There is still NO combined CE+PE total cap in
-either package — each type is gated independently, so "caps at 2" means up
-to 4 concurrent (2 CE + 2 PE), and a real total ceiling would need a new
-`MAX_LIVE_POSITIONS_TOTAL` primitive. There is NO combined CE+PE total cap in
-the code — `_cap_for()` / `reserve_symbol()` gate each type independently;
-a true total ceiling would need a new `MAX_LIVE_POSITIONS_TOTAL` primitive.
+either package — `_cap_for()` / `reserve_symbol()` gate each type
+independently, so "caps at 2" means up to 4 concurrent (2 CE + 2 PE); a
+true total ceiling would need a new `MAX_LIVE_POSITIONS_TOTAL` primitive.
 
 Entry-cutoff (`ENABLE_TRADING_TIME_LIMIT` / `ALLOWED_TRADING_TIME`, gates
 NEW entries only — Options' own unprefixed env keys, wired in
