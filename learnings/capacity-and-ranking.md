@@ -12,12 +12,24 @@ either package — `_cap_for()` / `reserve_symbol()` gate each type
 independently, so "caps at 2" means up to 4 concurrent (2 CE + 2 PE); a
 true total ceiling would need a new `MAX_LIVE_POSITIONS_TOTAL` primitive.
 
-Entry-cutoff (`ENABLE_TRADING_TIME_LIMIT` / `ALLOWED_TRADING_TIME`, gates
-NEW entries only — Options' own unprefixed env keys, wired in
-option_main.py): turned ON at **11:00** for Options on 10 Sep 2026 (was
-off; Luxury already ran this at 11:00). Distinct from
-`RISK_THRESHOLD_CUTOFF_TIME` (11:30, switches the max-loss/profit-protect
-thresholds to their after-cutoff values, doesn't block entries).
+Entry timing (gates NEW entries only; `RISK_THRESHOLD_CUTOFF_TIME` 11:30 is
+separate — it only switches the max-loss/profit-protect thresholds, never
+blocks entries):
+
+- **Multi-window schedule** (`ENABLE_TRADING_WINDOWS` / `TRADING_WINDOWS`,
+  `is_within_trading_windows()`) — added + deployed 10 Sep 2026 for
+  **Options, Luxury AND Futures**, all at `09:15-11:00,14:00-15:28` (user
+  request: "zone1 9:15 upto 11 AM, zone2 2 PM upto 3:28 PM ... trading only
+  allowed within these 2 zones"). Windows are [start, end): start
+  inclusive, end exclusive. So no new entries in the **11:00-14:00 gap** or
+  after 15:28. `SQUARE_OFF_TIME` (15:15) still force-closes regardless, so
+  15:15 is the real upper bound for anything opened in zone 2.
+- When `ENABLE_TRADING_WINDOWS` is on it **supersedes** the older single
+  cutoff (`ENABLE_TRADING_TIME_LIMIT` / `ALLOWED_TRADING_TIME`) —
+  `is_past_allowed_trading_time()` short-circuits to False. Options' single
+  cutoff was briefly turned ON at 11:00 earlier the same day; the windows
+  feature replaced it. The single-cutoff env keys are left in place, inert,
+  as the fallback if windows are ever turned off.
 
 ## Three separate things can block an alert from becoming a trade — don't conflate them
 
