@@ -161,3 +161,33 @@ live LTP the monitor lost.
 cost when monitoring is healthy and doesn't cover the case where it isn't.
 Re-evaluate only if a real "bot monitoring was down and a position ran
 away" incident happens.
+
+## ENABLE_TARGET_EXIT: the fixed +TARGET_PCT exit is now a per-package toggle
+
+Added 10 Sep 2026 (traderBoy commit `fcbf1a5`). `config.ENABLE_TARGET_EXIT`
+(default `true`, env: `ENABLE_TARGET_EXIT` / `LUXURY_` / `FUTURES_` prefix)
+gates the `if ltp >= position.target_price: return "TARGET_HIT"` branch in
+`_exit_reason_for`. Present in all three option packages so the
+Options/Futures engine copies stay byte-identical.
+
+**Deployed: `FUTURES_ENABLE_TARGET_EXIT=false`** (user request: "disable
+TARGET_HIT for Futures, rest to remain same"). Options and Luxury keep it
+`true`.
+
+What "off" does: a winning Futures position is never closed just for
+touching `entry * (1 + TARGET_PCT)` (25%). It rides on to whatever fires
+next in `_exit_reason_for`'s order - `PROFIT_PROTECTION_HIT` (peak >
+₹1,500/1,000 then any dip past the give-back buffer), the trailing +
+dynamic + hard SL, `SUPERTREND_EXIT`, the liquidity guard, or the 15:15 EOD
+square-off. `target_price` is still computed and stored (reconciliation /
+`/positions` display use it) - it's just no longer an exit trigger. The
+loss side (`MAX_LOSS_HIT`, all SLs) and every entry gate are untouched.
+
+Net effect to watch for as real Futures data accumulates: with the fixed
+target gone, **`PROFIT_PROTECTION_HIT` becomes Futures' primary profit-
+taking exit**. The zero-drawdown-tolerance PP finding above (give-back
+buffer is net-negative) now matters more for Futures than for Options -
+worth re-checking whether the ₹1,500/1,000 PP threshold is the right level
+once there's a Futures trade population to measure. This is effectively a
+live test of "let winners run vs. lock the +25%" on the second independent
+Options copy while the original keeps the fixed target.
