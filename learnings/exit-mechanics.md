@@ -216,10 +216,22 @@ Supertrend signal):
   candles)`. `EMA_CROSS_EXIT` needs `crossed and (fast<slow for a CE)` -
   so entering a CE while EMA9 is *already* below EMA12 does NOT trigger it
   (no flip on the latest bar); only an actual cross after entry does.
-- **Warmup:** needs `slow_period + 1` = 13 closed 5-min candles minimum.
-  So the signal is dead until ~10:20 IST for anything in the morning
-  entry window (09:15-11:00) - only the 14:00-15:28 window gets it from
-  the first entry. Inherent to a 12-period EMA on 5-min bars; accepted.
+- **Warm-up (fixed, commit `2268ec6`):** `refresh_ema_cross_signal`
+  fetches `EMA_CROSS_WARMUP_LOOKBACK_DAYS` = 5 calendar days of prior
+  5-min candles alongside today's, so both EMAs are fully seeded from the
+  session's first bar. Earliest a cross can register today is the **2nd
+  closed bar (~09:25 IST)**, not ~10:20. A crossover also only counts when
+  the two compared bars are in the **same session** (no exit on an
+  overnight EMA flip on the day's first bar). `intraday_minute_data`
+  happily returns multi-day 5-min history (verified: 5 days → ~290 bars,
+  4 sessions).
+- **The only remaining wait** is for the 5-min candle the cross happens
+  in to actually close - unavoidable for "EMA of the 5-min *close*". Once
+  it closes, the exit fires on the next monitor tick (~2s) / signal
+  refresh (~15s cap). If sub-5-min reaction is ever wanted, that needs an
+  intra-candle variant (act on the forming candle's live price vs the
+  EMAs) - deliberately not built; it trades noise for speed and
+  contradicts "of the 5-min close".
 
 Live sanity check at deploy (market closed, real data): RELIANCE read
 `bearish=True crossed=False` (EMA9 under EMA12 but no fresh cross),
