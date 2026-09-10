@@ -191,3 +191,44 @@ worth re-checking whether the ₹1,500/1,000 PP threshold is the right level
 once there's a Futures trade population to measure. This is effectively a
 live test of "let winners run vs. lock the +25%" on the second independent
 Options copy while the original keeps the fixed target.
+
+## EMA_CROSS_EXIT: a second trend-reversal exit alongside Supertrend (Futures)
+
+Added 10 Sep 2026 (traderBoy commit `9591411`), **deployed
+`FUTURES_ENABLE_EMA_CROSS_EXIT=true`**; Options and Luxury keep it off
+(default). Fires `EMA_CROSS_EXIT` when the fast EMA of the underlying's
+5-min close *crosses* the slow EMA against the position's direction -
+`EMA_CROSS_FAST_PERIOD=9` below `EMA_CROSS_SLOW_PERIOD=12` for a CE, the
+reverse for a PE - on a fully-closed candle **later than the entry
+candle** (same entry-candle skip as the Supertrend exit, for the same
+reason: don't cut a trade flat on the bar it opened on). Checked right
+after `SUPERTREND_EXIT`, before the liquidity guard.
+
+Mechanics (`dhan_client.refresh_ema_cross_signal`, shared cache, poll-loop
+refresh only - tick path reads it synchronously, exactly like the
+Supertrend signal):
+
+- EMA is SMA-seeded (`_compute_ema`), computed on today's 5-min closes
+  only (`intraday_minute_data` with `from=to=today`), still-forming candle
+  dropped.
+- It's a **crossover edge, not a standing state**: the cache stores
+  `crossed = (sign of fast-slow flipped between the last two closed
+  candles)`. `EMA_CROSS_EXIT` needs `crossed and (fast<slow for a CE)` -
+  so entering a CE while EMA9 is *already* below EMA12 does NOT trigger it
+  (no flip on the latest bar); only an actual cross after entry does.
+- **Warmup:** needs `slow_period + 1` = 13 closed 5-min candles minimum.
+  So the signal is dead until ~10:20 IST for anything in the morning
+  entry window (09:15-11:00) - only the 14:00-15:28 window gets it from
+  the first entry. Inherent to a 12-period EMA on 5-min bars; accepted.
+
+Live sanity check at deploy (market closed, real data): RELIANCE read
+`bearish=True crossed=False` (EMA9 under EMA12 but no fresh cross),
+SBIN `bearish=False crossed=True` (a cross up on the 15:25 candle) -
+signal computes correctly against real candles.
+
+Not backtested before enabling - it's a plain trend-follower exit on the
+same 5-min grid as the (backtested, kept) Supertrend exit, and it's on
+the Futures copy specifically so it can be measured against the Options
+original without touching that. Watch: does it exit good Futures trades
+early (same failure mode the Supertrend entry-candle skip was added for),
+and how often does it beat Supertrend to the exit vs just duplicate it.
