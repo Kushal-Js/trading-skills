@@ -4,9 +4,19 @@ Applies to: DhanBoy's Options package. `MAX_LIVE_POSITIONS_CE`/`_PE` and
 `TOP_N_STOCKS`. Live cap history: CE=4/PE=0/TOP_N=4 (27–28 Aug 2026, PE
 fully off) → CE=3/PE=0 (30 Aug) → CE=2/PE=2 (31 Aug, PE re-enabled, CE
 trimmed to keep combined exposure ~flat) → CE=1/PE=1 (1-per-side, some
-point after) → **CE=2/PE=2 (10 Sep 2026, user request "update Option max
-concurrent trade quota to 2" — `.env`-only change on the droplet, code
-default was already 2; up to 4 concurrent, 2 per side)**. `TOP_N_STOCKS=4`.
+point after) → CE=2/PE=2 (10 Sep 2026 AM) → **CE=3/PE=3 (10 Sep 2026,
+user asked for "max concurrent CE+PE to 3" then chose per-side=3 each when
+told there's no combined-total knob — so up to 6 concurrent, not 3;
+`.env`-only)**. `TOP_N_STOCKS=4`. There is NO combined CE+PE total cap in
+the code — `_cap_for()` / `reserve_symbol()` gate each type independently;
+a true total ceiling would need a new `MAX_LIVE_POSITIONS_TOTAL` primitive.
+
+Entry-cutoff (`ENABLE_TRADING_TIME_LIMIT` / `ALLOWED_TRADING_TIME`, gates
+NEW entries only — Options' own unprefixed env keys, wired in
+option_main.py): turned ON at **11:00** for Options on 10 Sep 2026 (was
+off; Luxury already ran this at 11:00). Distinct from
+`RISK_THRESHOLD_CUTOFF_TIME` (11:30, switches the max-loss/profit-protect
+thresholds to their after-cutoff values, doesn't block entries).
 
 ## Three separate things can block an alert from becoming a trade — don't conflate them
 
