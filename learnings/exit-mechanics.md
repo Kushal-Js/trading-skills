@@ -208,23 +208,18 @@ Mechanics (`dhan_client.refresh_ema_cross_signal`, shared cache, poll-loop
 refresh only - tick path reads it synchronously, exactly like the
 Supertrend signal):
 
-- EMA is SMA-seeded (`_compute_ema`), computed on today's 5-min closes
-  only (`intraday_minute_data` with `from=to=today`), still-forming candle
-  dropped.
+- EMA is SMA-seeded (`_compute_ema`), computed on a continuous
+  multi-session 5-min series (see the "Continuous intraday history"
+  section below), still-forming candle dropped.
 - It's a **crossover edge, not a standing state**: the cache stores
   `crossed = (sign of fast-slow flipped between the last two closed
   candles)`. `EMA_CROSS_EXIT` needs `crossed and (fast<slow for a CE)` -
   so entering a CE while EMA9 is *already* below EMA12 does NOT trigger it
-  (no flip on the latest bar); only an actual cross after entry does.
-- **Warm-up (fixed, commit `2268ec6`):** `refresh_ema_cross_signal`
-  fetches `EMA_CROSS_WARMUP_LOOKBACK_DAYS` = 5 calendar days of prior
-  5-min candles alongside today's, so both EMAs are fully seeded from the
-  session's first bar. Earliest a cross can register today is the **2nd
-  closed bar (~09:25 IST)**, not ~10:20. A crossover also only counts when
-  the two compared bars are in the **same session** (no exit on an
-  overnight EMA flip on the day's first bar). `intraday_minute_data`
-  happily returns multi-day 5-min history (verified: 5 days → ~290 bars,
-  4 sessions).
+  (no flip on the latest bar); only an actual cross after entry does. The
+  series runs continuously across the overnight gap, so a flip on the
+  day's first bar (vs the prior session's last) IS a crossover and fires
+  - the entry-candle skip is the only thing protecting a fresh intraday
+  entry.
 - **The only remaining wait** is for the 5-min candle the cross happens
   in to actually close - unavoidable for "EMA of the 5-min *close*". Once
   it closes, the exit fires on the next monitor tick (~2s) / signal
@@ -233,14 +228,55 @@ Supertrend signal):
   EMAs) - deliberately not built; it trades noise for speed and
   contradicts "of the 5-min close".
 
-Live sanity check at deploy (market closed, real data): RELIANCE read
-`bearish=True crossed=False` (EMA9 under EMA12 but no fresh cross),
-SBIN `bearish=False crossed=True` (a cross up on the 15:25 candle) -
-signal computes correctly against real candles.
-
 Not backtested before enabling - it's a plain trend-follower exit on the
 same 5-min grid as the (backtested, kept) Supertrend exit, and it's on
 the Futures copy specifically so it can be measured against the Options
 original without touching that. Watch: does it exit good Futures trades
 early (same failure mode the Supertrend entry-candle skip was added for),
 and how often does it beat Supertrend to the exit vs just duplicate it.
+
+## Continuous intraday history — every indicator, every strategy (no daily warm-up lag)
+
+10 Sep 2026 (traderBoy commits `75a60d3` + `d1573e2`), user request: "no
+lag across ALL strategies, calculations run continuously across sessions,
+not with a fresh day start like a charting platform".
+
+**The problem it fixed:** every intraday indicator used to fetch
+`intraday_minute_data` with `from_date=today, to_date=today`. A recursive
+indicator (Supertrend, EMA, RSI, ATR) seeded from *today's* candles only
+is either uncomputable or unreliable until enough bars have closed:
+
+| Indicator | period | first value | reliable |
+|---|---|---|---|
+| 5-min Supertrend (`SUPERTREND_PERIOD=10`) | 10 | ~10:10 IST | later still — bands need history, "reads bearish on ~everything" early |
+| EMA(9/12) 5-min | 12 | ~10:20 IST | ~10:20 |
+
+i.e. the entire 09:15–11:00 morning entry window was largely unprotected
+by these exits.
+
+**The fix:** one chokepoint — `dhan_wrapper.fetch_continuous_intraday()` —
+pulls `INTRADAY_CONTINUOUS_LOOKBACK_DAYS` (7 calendar days ≈ 5 trading
+sessions) of candles *through* today, wrapped in `_retry`. Every fetch
+site routes through it: `refresh_supertrend_signal`,
+`refresh_ema_cross_signal`, `refresh_liquidity_signal` (Options/Futures/
+Luxury), Swing's `_fetch_supertrend_state_once`, and the IndexScalping /
+CopperOptions / K01 paper engines. Result: bands/EMAs fully warm from the
+**session's first bar**, exactly like a charting platform's continuous
+intraday chart. `tests/test_continuous_intraday.py` guards against a
+regression reintroducing a today-only fetch.
+
+**Consequences worth knowing:**
+- Dhan `intraday_minute_data` returns a genuinely continuous
+  multi-session series (verified: 1-min 7d → ~2200 bars / ~5 sessions;
+  5-min 7d → ~430 bars / 6 sessions). No synthetic overnight bars.
+- The 5-min-multi-day endpoint *intermittently* returns
+  `status=failure` under rapid back-to-back calls (rate limit) — `_retry`
+  + the 15s signal cache absorb it in production; a failed refresh just
+  means "no signal this cycle", same degradation the today-only fetch had.
+- Crossover edges (`EMA_CROSS_EXIT`, Swing's `SupertrendState.crossed_*`)
+  now span the overnight gap: a flip between the prior session's last bar
+  and today's first IS a crossover and will fire. This is intentional
+  ("like a charting platform") and correct for overnight-carried NRML
+  positions — the trend genuinely flipped. The per-position entry-candle
+  skip still prevents a *fresh* intraday entry being whipsawed on its own
+  entry bar.
