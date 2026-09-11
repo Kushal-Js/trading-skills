@@ -364,3 +364,59 @@ whether the position was actually reversing. Net +₹1.5k here, but the
 effect bit hard because 10 Sep happened to cluster 6 SUPERTREND exits in
 that 30-minute warm-up window; a day without that cluster would show
 near-zero. Small sample — one day, 6 trades.
+
+## MAX_LOSS_HIT disabled before 11:30 - rely on trend-reversal exits instead (11 Sep 2026)
+
+User request, across Options/Futures/Luxury: "disable MAX_LOSS_HIT for
+before 11:30 and add exit conditions as below: EMA 9 of 5 min close
+crossed below EMA 12 of 5 min close or 5 min close crossed below 5 min
+supertrend." Both trend-reversal exits (`SUPERTREND_EXIT`,
+`EMA_CROSS_EXIT`) already existed in the shared `_exit_reason_for`
+ladder from earlier work - this request was really "stop cutting losers
+on a hard rupee cap in the volatile morning session; let the trend
+signals decide instead" - so the actual new code is the disable, not the
+exits themselves.
+
+**New flag**: `ENABLE_MAX_LOSS_HIT_BEFORE_CUTOFF` (per-package, default
+**False**) in each package's own `config.py`. Wired into `_exit_reason_
+for`'s existing MAX_LOSS_HIT check: `if (ENABLE_MAX_LOSS_HIT_BEFORE_
+CUTOFF or not _is_before_risk_threshold_cutoff()) and loss_rs >=
+current_max_loss_per_trade_rs(): return "MAX_LOSS_HIT"` - reuses the
+SAME `RISK_THRESHOLD_CUTOFF_TIME` (11:30) boundary the before/after
+rupee-cap split already used. Default False means MAX_LOSS_HIT never
+fires before 11:30 AT ALL, any loss size - not just "under the old
+1200/1300 cap." At/after 11:30, behaves exactly as before. Nothing else
+in the ladder is touched - TARGET_HIT/PROFIT_PROTECTION_HIT/the
+percentage TRAILING_SL_HIT-STOP_LOSS_HIT/SUPERTREND_EXIT/EMA_CROSS_EXIT/
+LIQUIDITY_GUARD all still apply before 11:30 exactly as before.
+
+**Real consequence worth tracking**: before 11:30, the effective floor
+on a single trade is now whichever of the percentage stop-loss
+(`STOP_LOSS_PCT`, dynamic-SL-adjusted, currently −16% base) or a trend-
+reversal signal catches it first - not the ₹1,200-1,300 rupee cap. On a
+large-quantity/low-premium position (e.g. the 6,950-qty NHPC seen live
+on 11 Sep itself), a 16% stop-loss is a materially bigger rupee loss
+than that cap ever was. This is the tradeoff the user explicitly asked
+for (favor trend-following over a hard rupee floor in the morning), but
+worth watching against real trades once it's had a few sessions live -
+if the morning MAX_LOSS_HIT removal turns out to let losers run
+noticeably bigger than the trend exits catch them, that's the signal to
+either re-enable it (`ENABLE_MAX_LOSS_HIT_BEFORE_CUTOFF=true`) or tune
+`STOP_LOSS_PCT` tighter for the morning window specifically.
+
+**EMA_CROSS_EXIT turned on for Options and Luxury too** (previously
+Futures-only, since 10 Sep 2026 - see the EMA-cross backtest section
+above). Same shared signal computation (`Options/dhan_client.py`'s
+`refresh_ema_cross_signal`), each package's own `ENABLE_EMA_CROSS_EXIT`
+flag flipped on via the deployed `.env` (code default stays `false`
+for a fresh checkout). The earlier Futures-only backtest against `02
+Krishvi.csv` found EMA-cross mildly net-negative in isolation
+(−₹1,910) - that finding still stands as a caveat; this change activates
+it more broadly anyway per the user's explicit request, alongside the
+MAX_LOSS_HIT change it's paired with (their combined effect together,
+not EMA-cross alone, is what should be watched against real trades).
+
+See `tests/test_risk_threshold_cutoff.py` (tests 4-6) for the disable
+behavior and its scoping to MAX_LOSS_HIT only, and `tests/
+test_luxury_corrective_actions.py` (test 17) for Luxury's own
+EMA-cross wiring check.
