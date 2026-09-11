@@ -76,6 +76,32 @@ Files: `test_choppy_stocks.py`, `test_cross_strategy_registry.py`,
 Every file re-run individually afterward, watched live for "Attempting
 authentication"/"Login failed" - all clean (traderBoy commit `705f799`).
 
+## Second recurrence, same day: `test_fund_allocation.py` missed by the sweep above
+
+While testing an unrelated change (turning on `BROKER_STOP_LOSS_ENABLED`/
+`FUTURES_BROKER_STOP_LOSS_ENABLED` and lowering `LOSS_REPEAT_BLOCK_COUNT`,
+later the same day), a full local suite run surfaced the exact same real
+PIN+TOTP login activity again - this time from `test_fund_allocation.py`.
+This file has its **own** separate `install_dhan_mocks()` (distinct from
+`test_fund_allocation_integration.py`, which the sweep above did patch)
+and was missed entirely - a plain naming collision (`fund_allocation` vs
+`fund_allocation_integration`) let it slip through the audit. Patched
+with the same 6 mocks (`refresh_ema_cross_signal`/
+`get_cached_ema_cross_candle_start`, `is_rsi_loss_reentry_blocked`/
+`get_cached_rsi`/`get_cached_prev_rsi`/`rsi_loss_reentry_reason`; no
+`should_delay_ce_entry` needed - this file never reaches the real webhook
+handler). Re-run clean, no auth activity, all 7 checks still pass
+(traderBoy commit `3b09310`). No damage - droplet token/session/positions
+confirmed unaffected both times.
+
+This is now a **third** occurrence of the identical failure class in one
+week (8 Sep, 11 Sep, 11 Sep again), and the second time in one day that a
+"complete" manual sweep still missed a file. That's strong evidence the
+manual-audit approach itself doesn't scale - even a careful grep-and-fix
+pass, run twice in one day, missed a file both times. Reinforces the
+Lesson below: this needs to stop depending on a human (or Claude)
+remembering to check every file by name.
+
 ## Lesson (the 8 Sep lesson didn't hold - this one needs to be structural)
 
 A per-incident manual patch has now failed to prevent a recurrence
