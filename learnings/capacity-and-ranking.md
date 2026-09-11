@@ -145,3 +145,52 @@ already defaulted to MARGIN. No live change - deployed `.env` has always
 set MARGIN. Pairs with `ENABLE_SQUARE_OFF=false` (positions carry
 overnight) - see the NRML/overnight-gap risk in
 [[exit-mechanics]] and the ICICIPRULI incident.
+
+## Same-day loss re-entry gate: fixed-minute cooldown replaced by an RSI condition (11 Sep 2026)
+
+The old same-day guard against immediately re-chasing a loss -
+`LOSS_COOLDOWN_ENABLED`/`LOSS_COOLDOWN_MINUTES` (20 min, added 2 Sep,
+tuned via a backtest sweep on Luxury's own trades) - was **removed
+entirely across Options/Futures/Luxury** (user request, 11 Sep 2026:
+"Remove this cooldown period logic from everywhere and all strategies").
+Trigger: a real INDUSTOWER Options alert on 11 Sep 2026 was skipped
+`loss_cooldown_active` at the **19-minute mark of the 20-minute window** -
+one minute short, purely because of the clock, with no read at all on
+whether the stock had actually recovered.
+
+**Replacement**: `ENABLE_RSI_LOSS_REENTRY_BLOCK` (default on, same
+per-package flag shape) blocks a fresh entry only when BOTH are true:
+1. This strategy already closed a real `MAX_LOSS_HIT` on this exact
+   symbol earlier TODAY (`trade_history.loss_exit_count_today`, same
+   durable log the old cooldown and the repeat-loss block both already
+   read - unchanged).
+2. The stock's own RSI(14) on 5-min candles is either **overbought**
+   (`> RSI_LOSS_REENTRY_OVERBOUGHT`, default 88) **or still falling**
+   (current confirmed 5-min RSI < the previous one) - `Options/
+   dhan_client.py`'s `refresh_rsi_signal`/`is_rsi_loss_reentry_blocked`,
+   one shared computation (same pattern as the shared Supertrend/
+   EMA-cross signals - always reads `Options.config`'s RSI params
+   regardless of which package calls it).
+
+Unlike the old cooldown (a one-shot timer that either has or hasn't
+expired) and unlike `LOSS_REPEAT_BLOCK_ENABLED` (permanent for the rest
+of the day once 2 losses land), this is a **live condition re-checked on
+every entry attempt**: if RSI recovers (drops back under the overbought
+line and turns from falling to rising) later the SAME day, the very next
+alert for that symbol goes through normally. PE is unaffected by
+anything here - this only ever gates a re-entry after a loss, on either
+leg, based on RSI, not direction.
+
+`trade_history.minutes_since_last_loss_today` (the pure function the old
+cooldown was built on) was deleted outright, not just unwired - fully
+dead once nothing called it. `loss_exit_count_today` (which the repeat-
+loss block already used) is unchanged and now double-duty: both guards
+read the same log, just for different purposes (repeat-block counts
+losses; the new gate only checks "at least one loss today, yes/no").
+
+See traderBoy's `Options/config.py` ("Same-day RSI-gated loss re-entry
+block" comment) for the full design note, and `tests/
+test_rsi_loss_reentry_block.py` (the shared RSI computation) +
+`tests/test_{options,futures,luxury}_corrective_actions.py` (each
+package's own wiring, RSI mocked to isolate from the underlying math)
+for the test coverage.
