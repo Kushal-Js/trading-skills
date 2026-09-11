@@ -194,3 +194,64 @@ test_rsi_loss_reentry_block.py` (the shared RSI computation) +
 `tests/test_{options,futures,luxury}_corrective_actions.py` (each
 package's own wiring, RSI mocked to isolate from the underlying math)
 for the test coverage.
+
+## Nifty50 open gap-down / sharp-fall CE cool-off, scaled + recovery-gated (11 Sep 2026)
+
+Built same-day (user request): "evaluate if Nifty50 has a Gap Down
+opening of more than 100 points or is sharp falling when market open,
+then wait for 10 mins before placing any CE orders otherwise proceed as
+normal." Shared, market-wide computation - `Options/dhan_client.py`'s
+`evaluate_nifty_open_condition()`/`should_delay_ce_entry()` - consumed
+identically by all 3 real strategies, each with its own `ENABLE_GAP_
+DOWN_CE_DELAY` switch. Only ever gates **CE**; PE is untouched (a
+falling Nifty is exactly when a PE alert should act). Trigger, computed
+once at market open from Nifty's own continuous candle series:
+`gap_down` = today's open vs yesterday's close is down >100 points, OR
+`sharp_falling` = price has already fallen >=0.3% from today's own open
+by the time this first gets checked.
+
+**Same-day validation, immediately**: 11 Sep 2026 itself was a real
+-207.5 point Nifty gap-down morning. 10 of 11 real trades across
+Options/Futures/Luxury that day hit `MAX_LOSS_HIT` (only one win,
++Rs.2,030), total -Rs.13,497 - and the flat 10-minute delay (deployed
+mid-morning, after several of these) would only have caught the first 4
+of them (all inside 09:15-09:25 IST), saving ~Rs.6,491 but still leaving
+~-Rs.7,006 on the table, because **Nifty itself stayed red (below its
+own 09:15 open) until 10:03 IST - 48 minutes in**, well past any flat
+short window.
+
+**Fix - two additions, both still checked by the same `should_delay_
+ce_entry()` call site, no wiring changes needed in any webhook handler**:
+
+1. **Scaled minimum delay** (`GAP_DOWN_EXTRA_DELAY_MINUTES_PER_100_
+   POINTS`, default 5): a bigger gap gets a proportionally longer
+   minimum wait before CE is even reconsidered - `scaled_minutes = min(
+   GAP_DOWN_MAX_DELAY_MINUTES, GAP_DOWN_CE_DELAY_MINUTES + EXTRA_PER_
+   100 * max(0, |gap_points| - THRESHOLD) / 100)`. On the real -207.5
+   point day: 10 + 5*(107.5/100) = 15.4 minutes (only the gap-down case
+   scales; a sharp-fall-only trigger has no comparable "size" and always
+   gets the plain base).
+2. **Nifty-recovery gate** (`ENABLE_NIFTY_RECOVERY_GATE`, default on,
+   NOT per-package - it tunes the shared mechanism itself): PAST that
+   scaled minimum, the hold EXTENDS until Nifty's own still-forming
+   daily candle has turned green - latest close back at/above TODAY's
+   OPEN (`is_nifty_recovering()`) - rather than releasing on a clock
+   that has no idea whether the selling actually stopped. Capped by
+   `GAP_DOWN_MAX_DELAY_MINUTES` (default 120 = 2h) as an absolute safety
+   ceiling so a session that genuinely never recovers can't silently
+   disable CE all day.
+
+Both new knobs live only in `Options.config` (shared computation
+parameters, same as `GAP_DOWN_THRESHOLD_POINTS` already was) - not
+duplicated per-package, since they tune the ONE shared algorithm every
+strategy calls into, not a per-strategy trading decision.
+
+Backtested against 11 Sep 2026's own real Nifty price path: a
+"wait-until-green" gate (recovery at 10:03 IST) would have skipped 7 of
+the 11 real trades (the one +Rs.2,030 win among them), leaving only the
+3 trades after 10:03 (all losers, -Rs.4,306 combined) - net day would
+have been roughly **-Rs.4,306 instead of -Rs.13,497**, a ~Rs.9,191
+improvement, even giving up the one win. See `tests/test_nifty_gap_down_
+ce_delay.py` (tests 7-12) for the scaling formula, the recovery-gate
+math, and the hard-cap safety net, each validated against this same real
+day's exact numbers.
