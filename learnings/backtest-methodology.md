@@ -99,6 +99,57 @@ sim-clock trap doesn't necessarily change your headline number, but it can
 substantially change trade count and win-rate, which matter for judging
 whether a config's risk profile is being read correctly.
 
+### Entry-candle-skip look-ahead bug (found and fixed same day, 14 Sep 2026)
+
+While validating the EMA_CROSS_EXIT/liquidity-guard additions above against
+the "04 Range Breakout.csv" backtest, the results looked wrong on
+inspection — win rate dropped to 46.8% (from a sane ~75%) and three early
+days showed dozens of trades that ALL exited exactly 1 minute after entry
+at exactly the entry price (`pnl=0.0`). That pattern doesn't happen in real
+trading; it turned out to be a second, more serious bug than the missing
+exit conditions this same pass was fixing.
+
+**The bug**: `evaluate_exit_reason`'s Supertrend/EMA-cross checks located
+"the current candle" via `idx_at_or_after(underlying_ts_list, t)` — the
+NEXT candle boundary at-or-after t. Since 5-min candle boundaries are only
+5 minutes apart, at t = entry+1min this almost always already points to
+the candle immediately AFTER the entry candle — a candle that, in real
+time, is still forming and hasn't closed yet. The entry-candle-skip check
+(`candle_start > entry_candle_start`) then reads TRUE almost immediately,
+defeating the very protection it's supposed to provide, and firing
+SUPERTREND_EXIT/EMA_CROSS_EXIT within a minute of entry at essentially
+unchanged premium. This bug was present in **every backtest run this
+session before 14 Sep 2026** (visible in retrospect as occasional
+`SUPERTREND_EXIT pnl=0.0` lines in every prior day-wise report) — it just
+became dramatically more visible once EMA_CROSS_EXIT gave it a second
+trigger and the sim-clock fix made every minute checkable.
+
+**The fix**: the live code reads a CACHED "last fully-closed candle" value
+that a real poll loop only refreshes once a candle has actually closed —
+it never sees a still-forming candle. The backtest equivalent is
+`idx_at_or_before(underlying_ts_list, t - candle_interval_seconds)`, not
+`idx_at_or_after(t)`. The same fix applies to the liquidity guard's own
+1-min bar lookup (`is_illiquid_at`), mirroring `refresh_liquidity_signal`'s
+own explicit "drop the current, still-forming candle" step.
+
+Effect on "03 Range Breakout.csv": 81 trades/70.4% win rate (with the bug)
+→ 78 trades/75.6% win rate/+₹119,276 (fixed) — much closer to the original
+pre-EMA-cross baseline (60 trades/83.3%/+₹121,027), which is reassuring:
+the fix didn't invent a new number, it removed noise that had been
+inflating trade count and suppressing win rate by a real but bounded
+amount. **Any future addition to `evaluate_exit_reason` that reads a
+"current candle" must use this same at-or-before-minus-interval pattern —
+copying the old idx_at_or_after convention reintroduces this exact bug.**
+
+One related, INTENTIONAL behavior confirmed while validating this fix:
+`LIQUIDITY_GUARD_ZERO_VOLUME` can still legitimately fire within 1 minute
+of entry, at pnl≈0 — this is NOT the same bug. It correctly reflects a
+contract whose volume was already zero in the bars immediately before/at
+entry (the live guard only gates exits, not entries, so a position can be
+opened into an already-thin contract and immediately exit once that's
+detected) — a real scenario the guard was built for (see the CHOLAFIN
+incident this guard is based on), not a lookup error. Don't "fix" this one.
+
 ### NOT modeled (Generation 2, disclosed standing gaps)
 
 - Broker-side SL-L order (can only improve on the modeled exit, never
