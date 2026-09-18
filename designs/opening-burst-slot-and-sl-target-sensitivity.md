@@ -1,4 +1,6 @@
-Status: both backtested only, neither deployed — 19 Sep 2026
+Status: opening-burst slot DEPLOYED flag-on 19 Sep 2026 (traderBoy commit
+d454d74) despite the thin-sample caveat below, per explicit user
+decision; SL/target sensitivity remains backtest-only, not deployed.
 
 # Opening-burst extra capacity slot + stop-loss/target sensitivity
 
@@ -12,7 +14,9 @@ live in `traderBoy/backtest_opening_burst_extra_slot.py` and
 
 ## 1. Opening-burst extra capacity slot
 
-**Design** (backtest only, not deployed): a single time-of-day tweak to
+**Design** (deployed 19 Sep 2026 - `BURST_CAPACITY_ENABLED=true` by
+default in all 3 packages, window 09:15-10:00 IST, +1 CE slot): a single
+time-of-day tweak to
 the existing capacity gate, no new position-management logic -
 `effective_cap = MAX_LIVE_POSITIONS_CE + BURST_EXTRA_SLOTS_CE` while
 `now` is inside a configurable window (default 09:15-09:40 IST). A
@@ -130,3 +134,27 @@ across symbols by construction. Whether normalizing the cap as a % of
 entry premium value (rather than a flat rupee number) would change
 outcomes is a real, separate question worth its own backtest before
 touching MAX_LOSS_PER_TRADE_RS_BEFORE/AFTER_CUTOFF.
+
+## New finding while validating the deploy: 9 tests are time-of-day flaky
+
+Full suite run at ~1:30-1:40 AM IST (right before deploying the burst
+slot) showed 16 failures - 7 more than the documented 9-failure baseline
+from earlier the same day. The 7 new ones (`test_*_ltp_stale_for_too_
+long_forces_a_market_exit...` across Futures/Luxury/Options/Swing broker-
+stop-loss and Swing v2 files, `test_9/16_profit_protection_giveback_
+buffer` across Futures/Luxury/Options corrective-actions files,
+`test_12_ema_cross_refresh_runs_on_a_continuous_multi_session_series`,
+and `test_8_ltp_staleness_uses_mcx_segment_codes_for_an_mcx_position`)
+span code the burst-capacity change never touches (Swing MCX, EMA-cross
+refresh) - an immediate signal this wasn't a regression.
+
+Confirmed via `git stash` (stashing the burst-capacity changes) then
+re-running just those files: **identical 9 failures on the clean,
+unmodified baseline** - proving this is pre-existing time-of-day
+flakiness in the test suite itself, not caused by the deploy. Not yet
+root-caused (candidate: tests computing relative time windows against
+real `datetime.now()` that behave differently very late at night vs.
+during a normal trading-day run), but now a known, reproducible pattern
+- if a future session sees test failures cluster around `ltp_stale`/
+`profit_protection_giveback`/`ema_cross_refresh`/`mcx_segment_codes`
+specifically, check the wall-clock time before assuming a regression.
