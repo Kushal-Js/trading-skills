@@ -1,6 +1,6 @@
 Status: opening-burst slot DEPLOYED flag-on 19 Sep 2026 (traderBoy commit
 d454d74) despite the thin-sample caveat below, per explicit user
-decision; SL/target sensitivity remains backtest-only, not deployed.
+decision; SL/target sensitivity remains backtest-only, not deployed - AND its first-published conclusion was wrong, see the CORRECTION section below.
 
 # Opening-burst extra capacity slot + stop-loss/target sensitivity
 
@@ -97,43 +97,59 @@ produced result for the *same* symbols under the *same* config before
 trusting a sweep across other configs. Both bugs here would have
 silently produced a confidently wrong recommendation without that check.
 
-### Result: current 16%/20% is already close to optimal
+### CORRECTION (19 Sep 2026, same day) - the original conclusion below this heading was WRONG
+
+The first version of this section reported "current 16%/20% is already
+near-optimal" and "STOP_LOSS_PCT is functionally decorative". Both were
+artifacts of a config mis-read on my part: the sweep pinned the flat-rupee
+MAX_LOSS cap at Rs 1,200 (before 11:30) / Rs 1,000 (after) - the code
+DEFAULTS - when the droplet's live `.env` actually has
+`MAX_LOSS_PER_TRADE_RS_BEFORE_CUTOFF=4500` / `..._AFTER_CUTOFF=2100`
+(Options, Futures and Luxury identical). My `.env` grep at the time only
+matched the `_CE`/`_PE`-suffixed key names and silently missed the
+un-suffixed CE-side lines. With a Rs 1,200 cap, MAX_LOSS_HIT fired before
+the 16% stop ever could, which is what made every stop-loss row look
+identical. With the real Rs 4,500/2,100 caps the percentage stop is very
+much live: `STOP_LOSS_HIT` fired 29 times at the current 16%/20% setting.
+
+**Lesson (also for future backtests here): pull EVERY relevant key with a
+broad pattern (`grep -E "MAX_LOSS|PROFIT_PROTECTION"`) and diff against the
+code defaults BEFORE hardcoding "live values" into a script - a targeted
+regex that matches the key names you expect will silently skip the ones you
+didn't.**
+
+Corrected grid (same 5 days / 276 symbol-trades, same fixed ladder except
+MAX_LOSS = 4500 before 11:30 / 2100 after):
 
 | SL \ Target | 10% | 15% | 20% | 25% | 30% | 40% |
 |---|---|---|---|---|---|---|
-| 8% | -720 | 14,393 | 24,171 | 24,888 | 24,945 | 20,292 |
-| 10% | 4,457 | 23,541 | 32,809 | 33,389 | 33,455 | 31,829 |
-| 12% | 4,782 | 24,068 | 34,436 | **35,016** | 34,614 | 32,926 |
-| 14% | 3,598 | 22,778 | 33,146 | 33,727 | 33,325 | 31,636 |
-| **16% (current)** | 3,471 | 22,651 | **33,019** | 33,600 | 33,198 | 31,337 |
-| 20% | 3,471 | 22,651 | 33,019 | 33,600 | 33,198 | 31,164 |
-| 24% | 3,471 | 22,651 | 33,019 | 33,600 | 33,198 | 30,992 |
+| 8% | 12,200 | 28,329 | 39,042 | 38,784 | 37,790 | 33,138 |
+| 10% | 14,312 | 34,410 | 45,509 | 44,579 | 44,697 | 41,563 |
+| 12% | 11,565 | 31,527 | 44,050 | 44,368 | 44,019 | 42,117 |
+| 14% | 9,404 | 29,943 | 41,772 | 40,476 | 40,126 | 38,225 |
+| **16% (current)** | 11,890 | 33,814 | **45,072** | 45,012 | 44,662 | 41,030 |
+| 20% | 28,538 | 46,758 | 60,598 | 62,108 | 61,131 | 57,746 |
+| **24%** | 35,786 | 52,817 | 67,970 | **69,480** | 68,503 | 64,945 |
 
-Best found: SL=12%/Target=25% at +Rs 35,016 (113W/163L) vs current
-SL=16%/Target=20% at +Rs 33,019 (114W/162L) - only **+Rs 1,997 over 5
-days (~6% relative)**, essentially the same win/loss count. Not a
-compelling case to change either knob on this data alone.
+Best in-sample: SL=24%/Target=25% at +Rs 69,480 (137W/139L) vs current
+SL=16%/Target=20% at +Rs 45,072 (131W/145L) - a large in-sample gap
+(+Rs 24,408, ~54%), driven almost entirely by the stop-loss width, not the
+target: `STOP_LOSS_HIT` drops from 29 to 3 exits and those trades mostly
+recover or exit later via SUPERTREND_EXIT/PROFIT_PROTECTION instead. Target
+matters little between 20% and 30% at any stop width.
 
-**The one structural, high-confidence finding**: rows for 14/16/20/24%
-stop-loss are near-identical at every target level. `STOP_LOSS_HIT`
-never fires at all at the current combo (0 occurrences across 276
-trades) - `MAX_LOSS_HIT` (the flat-rupee cap, Rs 1200 before / Rs 1000
-after the 11:30 cutoff) always triggers first for CE contracts once
-STOP_LOSS_PCT is wider than ~12-14%. **STOP_LOSS_PCT is functionally
-decorative in the current config** - the real loss-limiting lever is
-MAX_LOSS_PER_TRADE_RS_BEFORE_CUTOFF/AFTER_CUTOFF, not STOP_LOSS_PCT.
-Anyone tuning "the stop-loss" going forward should be looking at that
-flat rupee figure, not the percentage.
-
-**Follow-on question this surfaces, not yet investigated**: a flat
-rupee cap means small-premium/large-lot contracts (SUZLON, GMRAIRPORT -
-lot sizes in the thousands) hit `MAX_LOSS_HIT` after a much smaller
-*percentage* move than large-premium/small-lot contracts (BOSCHLTD,
-SHREECEM - lot sizes of 25-50). Risk-per-trade is therefore inconsistent
-across symbols by construction. Whether normalizing the cap as a % of
-entry premium value (rather than a flat rupee number) would change
-outcomes is a real, separate question worth its own backtest before
-touching MAX_LOSS_PER_TRADE_RS_BEFORE/AFTER_CUTOFF.
+**How much to trust it: not enough to ship on its own.** Five days; every
+trade is a shadow-simulated CE-ATM fill at a candle close (no slippage, no
+broker stop, one trade per symbol, no capacity/cooldown gates), and the
+same period's REAL trading lost money while this simulation shows large
+profits - so the absolute numbers are far more optimistic than reality and
+only the *relative* ordering across cells is informative. A wider stop also
+means each loser can lose more per trade before the flat-rupee cap catches
+it (the cap is the real backstop then), so a proper evaluation should look
+at worst-case loss and drawdown, not just total PnL. Direction (a 16% stop
+is probably too tight for CE premium noise; 20-24% deserves a real look) is
+worth a follow-up with more days (18 Sep is now available) before any
+config change.
 
 ## New finding while validating the deploy: 9 tests are time-of-day flaky
 
