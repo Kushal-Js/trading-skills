@@ -1,6 +1,9 @@
-Status: BACKTEST ONLY, high-fidelity real-gate replication. +Rs71,479.70
-delta vs real Luxury PnL over 14 days, but only 18 trades - directional
-evidence, not a deployment case. Nothing wired live.
+Status: BACKTEST ONLY, high-fidelity real-gate AND real-exit-stack
+replication (updated 20 Sep 2026). Real exits corrected the delta DOWN
+from +Rs71,479.70 (naive target/stop only) to **+Rs32,649.10** - real
+`PROFIT_PROTECTION_HIT` cuts most winners short well before the naive
++20% target, which materially overstated the earlier number. 18 trades -
+directional evidence, not a deployment case. Nothing wired live.
 
 # Luxury-only signal-gated entry, simulated against real production gates
 
@@ -109,6 +112,75 @@ silent fail-opens masking a broken check.
   False`'s effect on this specific result is untested even though the
   mechanism was built to handle it correctly.
 
+## Real exit-stack replication (added 20 Sep 2026, user request)
+
+The result above originally used a naive fixed target(+20%)/hard-stop(
+-16%) pair only. Rebuilt `simulate_luxury_real_exit()` to faithfully
+replicate Luxury's actual `_exit_reason_for`, checked in the SAME
+priority order every tick, with every threshold read live from `Luxury.
+config`/`Options.config` (not hardcoded):
+
+1. **MAX_LOSS_HIT** - absolute rupee cap, Rs4,500 CE before 11:30 IST /
+   Rs2,100 after (`ENABLE_MAX_LOSS_HIT_BEFORE_CUTOFF=True` live, so this
+   can fire any time of day, not just after the cutoff).
+2. **TARGET_HIT** - entry x 1.20.
+3. **PROFIT_PROTECTION_HIT** - once peak profit exceeds Rs2,000 (before
+   11:30) / Rs1,500 (after), exits the moment price dips more than 3%
+   (`PROFIT_PROTECTION_GIVEBACK_PCT`, live value) below that peak.
+4. **TRAILING_SL_HIT / STOP_LOSS_HIT** - dynamic stop that ratchets up
+   1% tighter for every 7% (CE) the position has moved in its favor
+   (`ENABLE_TRAILING_SL` itself is off for Luxury - only the dynamic step
+   mechanism applies).
+5. **SUPERTREND_EXIT** - real 10-period/3.0-multiplier Supertrend on
+   5-min underlying candles (`bt_common.supertrend_state_at`, the same
+   pure function this repo's other backtests already validated against),
+   gated by a real >=0.10% minimum-underlying-move confirmation.
+6. **EMA_CROSS_EXIT** - real 9/12 EMA cross on 5-min underlying candles.
+   Approximated (disclosed): the exact internal cache semantics of
+   `dhan_client`'s `get_cached_ema_cross_crossed` aren't fully knowable
+   without reading its live implementation, so this walks back through
+   the EMA history to find the most recent fast/slow flip - a reasonable,
+   not verified-identical, reconstruction.
+7. **LIQUIDITY_GUARD_ZERO_VOLUME** - same 4-consecutive-zero-volume-bar
+   check as the entry-side gate, now checked continuously while holding.
+
+All rupee-based caps (MAX_LOSS_HIT, PROFIT_PROTECTION_HIT's giveback
+floor, the dynamic trailing SL) are converted to a PRICE level and
+checked against each 1-min candle's own high/low, filled at that level
+(or the candle's open if price gapped past it) - same convention as
+every other exit simulation in this line of work.
+
+### Result: real exits cut the naive version's edge by more than half
+
+| | Trades | Wins | Win Rate | Total PnL |
+|---|---|---|---|---|
+| REAL Luxury (14 days) | 125 | 45 | 36.0% | -Rs17,909.35 |
+| Naive target/stop-only simulation | 18 | 17 | 94.4% | +Rs53,570.35 |
+| **Real full exit-stack simulation** | 18 | 11 | 61.1% | **+Rs14,739.75** |
+
+Exit reason breakdown (18 trades): **PROFIT_PROTECTION_HIT 10**,
+TARGET_HIT 6, MAX_LOSS_HIT 1, LIQUIDITY_GUARD_ZERO_VOLUME 1.
+
+**The real finding**: `PROFIT_PROTECTION_HIT` dominates and usually exits
+near breakeven (6 of the 10 protection-hits closed at pnl=Rs0, or very
+close to it) - for the ultra-cheap, huge-quantity contracts this signal
+tends to pick (IDEA @0.62-0.68, PAYTM, OIL), the Rs1,500-2,000 profit
+threshold is crossed by a tiny few-paise move given the large lot size,
+and the 3% giveback then triggers on what's often just normal short-term
+noise for a penny-priced option - locking in a wash long before the real
+move (several of these same signals went on to hit the +20% target in
+the naive version) ever develops. The one confirmed `MAX_LOSS_HIT`
+(PAYTM, 16 Sep) landed at EXACTLY -Rs4,500, the configured cap to the
+rupee - strong evidence the price-level conversion and time-of-day gating
+are computing correctly, not coincidentally close.
+
+**This is exactly why the user's request to replicate real exits mattered
+- the naive +Rs71,479.70 delta was a real overstatement.** The corrected
++Rs32,649.10 (Real minus REAL Luxury: 14,739.75 - (-17,909.35)) is still
+solidly positive, but the mechanism producing it is now visibly different
+and much less clean: 6 clean target hits plus a handful of small giveback
+wins/breakevens, not a near-uniform sweep of +20% targets.
+
 ## Backtest functions vs. the real deployed functions (asked + verified 20 Sep 2026)
 
 **The backtest does NOT call the actual deployed global functions** - it
@@ -165,22 +237,18 @@ free:
   (trade_history.py), `reversal_filters.check_trend_strength()`,
   `dhan_wrapper.is_rsi_loss_reentry_blocked()` - all REAL, unmodified.
 
-**The one place a live version would genuinely differ from this
-backtest's own numbers - the EXIT side.** This backtest only modeled a
-fixed target(+20%)/hard-stop(-16%) pair. A real position, once created,
-is managed by Luxury's existing `monitor_loop`/`_check_one_position`/
-`_exit_reason_for` - which checks, in order: `MAX_LOSS_HIT` (an absolute
-rupee cap, tighter before `RISK_THRESHOLD_CUTOFF_TIME`), `TARGET_HIT`,
-`PROFIT_PROTECTION_HIT` (locks in profit above a rupee threshold with a
-giveback buffer), a **dynamic trailing stop-loss** that ratchets tighter
-as price rises (`TRAILING_SL_HIT`/`STOP_LOSS_HIT`), `SUPERTREND_EXIT`,
-and `LIQUIDITY_GUARD_ZERO_VOLUME` (exits early on a thinly-traded
-contract going quiet). None of these are modeled here. A live-deployed
-version of this signal would very plausibly exit earlier and differently
-than this backtest's clean target/stop pair suggests - **this backtest's
-+Rs71,479.70 delta should not be read as what a live version would
-actually produce on the exit side, only as evidence the ENTRY signal
-itself finds genuinely strong setups.**
+**UPDATE (same day): the exit side has since been replicated too** - see
+"Real exit-stack replication" above. At the time this was first written,
+only a naive target/stop pair had been tested and the prediction below
+was speculative; it turned out directionally correct (real exits DO
+change the result materially) but the backtest itself no longer has this
+gap. A live position, once created via `_process_one_entry`, would still
+be managed by the REAL `monitor_loop`/`_check_one_position`/`_exit_
+reason_for` rather than this script's own reconstruction of it - the
+remaining difference is the EMA-cross-state approximation disclosed
+above (the one exit path not verified byte-identical to production's own
+caching), plus that a live position can react to a genuine live LTP tick
+mid-candle, not just a candle's own OHLC.
 
 ## What's still open
 
