@@ -1,9 +1,15 @@
-Status: BACKTEST ONLY, high-fidelity real-gate AND real-exit-stack
-replication (updated 20 Sep 2026). Real exits corrected the delta DOWN
-from +Rs71,479.70 (naive target/stop only) to **+Rs32,649.10** - real
-`PROFIT_PROTECTION_HIT` cuts most winners short well before the naive
-+20% target, which materially overstated the earlier number. 18 trades -
-directional evidence, not a deployment case. Nothing wired live.
+Status: LIVE-DEPLOYED config change (21 Sep 2026) - Luxury's real
+MAX_LOSS_PER_TRADE_RS/PROFIT_PROTECTION_THRESHOLD_RS/GIVEBACK_PCT were
+raised on the live bot (.env, both local and droplet) straight off this
+backtest's own finding that `PROFIT_PROTECTION_HIT` was cutting most
+winners short. Result: delta improved from +Rs32,649.10 (old config) to
+**+Rs73,999.10** (new config) on the same 18-trade sample, now with ZERO
+PROFIT_PROTECTION_HIT exits at all - 16/18 trades ride clean to
+TARGET_HIT. See "Config raise" section below for the exact before/after
+numbers and caveats. The breakout-SIGNAL feature itself remains flag-
+enabled and live (see [[breakout-scanner-vs-real-pnl]]); this update is
+about Luxury's own risk-parameter config, which affects every Luxury
+position (not just breakout-signal-sourced ones).
 
 # Luxury-only signal-gated entry, simulated against real production gates
 
@@ -180,6 +186,117 @@ are computing correctly, not coincidentally close.
 solidly positive, but the mechanism producing it is now visibly different
 and much less clean: 6 clean target hits plus a handful of small giveback
 wins/breakevens, not a near-uniform sweep of +20% targets.
+
+## Config raise, deployed live (21 Sep 2026, user request)
+
+Straight off the "PROFIT_PROTECTION_HIT dominates and cuts winners short"
+finding above, the user raised Luxury's real risk parameters - deployed
+to BOTH the local repo's `.env` and the droplet's `.env` (gitignored,
+never a git commit - scp'd directly), then the live service restarted
+(positions confirmed flat immediately before and after, per the standing
+safety checklist):
+
+| Setting | Old | New |
+|---|---|---|
+| MAX_LOSS_PER_TRADE_RS (CE) before/after 11:30 | Rs4,500 / Rs2,100 | **Rs5,500 / Rs3,100** |
+| MAX_LOSS_PER_TRADE_RS (PE) before/after 11:30 | Rs3,500 / Rs1,600 | **Rs4,500 / Rs2,600** |
+| PROFIT_PROTECTION_THRESHOLD_RS before/after 11:30 | Rs2,000 / Rs1,500 | **Rs5,000 / Rs2,500** |
+| PROFIT_PROTECTION_GIVEBACK_PCT | 3% | **8%** |
+
+Re-ran the exact same 18-signal backtest (same 14-day window, same
+entries) against the new config - nothing else about the methodology
+changed.
+
+### Result: PROFIT_PROTECTION_HIT stopped firing entirely
+
+| | Trades | Wins | Win Rate | Total PnL |
+|---|---|---|---|---|
+| REAL Luxury (unaffected historical baseline) | 125 | 45 | 36.0% | -Rs17,909.35 |
+| Old config (Rs2,000/1,500 threshold, 3% giveback) | 18 | 11 | 61.1% | +Rs14,739.75 |
+| **New config (Rs5,000/2,500 threshold, 8% giveback)** | 18 | 16 | **88.9%** | **+Rs56,089.75** |
+| **Delta vs. real (new config)** | | | | **+Rs73,999.10** |
+
+Exit reasons, new config: **TARGET_HIT 16**, MAX_LOSS_HIT 1 (PAYTM,
+16 Sep - landed at exactly -Rs5,500, the new cap, same precise price-
+level-conversion validation as before), LIQUIDITY_GUARD_ZERO_VOLUME 1
+(MAHABANK, 11:55 - breakeven, unrelated to the risk-parameter change).
+**Zero PROFIT_PROTECTION_HIT exits** - every trade that would have been
+cut short before now had room to reach its own natural TARGET_HIT
+instead, since the much higher threshold (Rs5,000/2,500 vs Rs2,000/1,500)
+and wider giveback (8% vs 3%) together mean a position has to build a
+much larger real peak profit, and give back a lot more of it, before this
+exit path can fire at all - closing most of the gap to the fully naive
+(no-profit-protection-at-all) simulation from the "Real exit-stack
+replication" section above (+Rs71,479.70) without actually disabling the
+mechanism.
+
+### Day-wise (new config, 18 trades)
+
+| Day | Real Trades | Real PnL | Sim Trades | Sim PnL | Delta |
+|---|---|---|---|---|---|
+| 1 Sep | 7 | -3,240.00 | 0 | 0.00 | +3,240.00 |
+| 2 Sep | 0 | 0.00 | 1 | 9,720.60 | +9,720.60 |
+| 3 Sep | 25 | -10,229.00 | 3 | 8,101.25 | +18,330.25 |
+| 4 Sep | 12 | -361.50 | 4 | 17,216.40 | +17,577.90 |
+| 8 Sep | 4 | 1,951.25 | 1 | 3,317.50 | +1,366.25 |
+| 9 Sep | 8 | -3,857.50 | 2 | 9,190.25 | +13,047.75 |
+| 10 Sep | 6 | -1,402.50 | 1 | 2,912.00 | +4,314.50 |
+| 11 Sep | 1 | -1,338.75 | 1 | 3,870.00 | +5,208.75 |
+| 16 Sep | 3 | 6,139.25 | 2 | -3,952.00 | -10,091.25 |
+| 17 Sep | 26 | 5,130.00 | 0 | 0.00 | -5,130.00 |
+| 18 Sep | 33 | -10,700.60 | 3 | 5,713.75 | +16,414.35 |
+| **Total** | | **-17,909.35** | | **56,089.75** | **+73,999.10** |
+
+Only one day (16 Sep) is net negative for the sim vs real - the single
+MAX_LOSS_HIT (PAYTM, -5,500) landed that day. 17 Sep has zero sim signals
+at all (real Luxury still traded 26 times for -PnL that day) - the
+breakout screener simply found no qualifying setup, not a config effect.
+
+### Trade-wise (new config, 18 trades)
+
+| Day | Symbol | Signal Time | Entry | Exit | Exit Reason | Qty | PnL |
+|---|---|---|---|---|---|---|---|
+| 2 Sep | IDEA | 09:50 | 0.68 | 0.82 | TARGET_HIT | 71,475 | +9,720.60 |
+| 3 Sep | MAHABANK | 09:15 | 1.95 | 2.34 | TARGET_HIT | 6,500 | +2,535.00 |
+| 3 Sep | SBICARD | 09:15 | 10.80 | 12.96 | TARGET_HIT | 800 | +1,728.00 |
+| 3 Sep | GODREJPROP | 10:15 | 59.05 | 70.86 | TARGET_HIT | 325 | +3,838.25 |
+| 4 Sep | RELIANCE | 09:15 | 20.95 | 25.14 | TARGET_HIT | 500 | +2,095.00 |
+| 4 Sep | IDEA | 11:00 | 0.62 | 0.74 | TARGET_HIT | 71,475 | +8,862.90 |
+| 4 Sep | TATASTEEL | 13:40 | 3.88 | 4.66 | TARGET_HIT | 2,750 | +2,134.00 |
+| 4 Sep | SWIGGY | 14:30 | 11.30 | 13.56 | TARGET_HIT | 1,825 | +4,124.50 |
+| 8 Sep | GVT&D | 09:25 | 132.70 | 159.24 | TARGET_HIT | 125 | +3,317.50 |
+| 9 Sep | COALINDIA | 09:15 | 4.95 | 6.50 | TARGET_HIT | 1,350 | +2,092.50 |
+| 9 Sep | PAYTM | 09:15 | 48.95 | 58.74 | TARGET_HIT | 725 | +7,097.75 |
+| 10 Sep | OIL | 09:15 | 10.40 | 12.48 | TARGET_HIT | 1,400 | +2,912.00 |
+| 11 Sep | MCX | 10:35 | 86.00 | 103.20 | TARGET_HIT | 225 | +3,870.00 |
+| 16 Sep | PAYTM | 09:15 | 84.15 | 76.56 | **MAX_LOSS_HIT** | 725 | **-5,500.00** |
+| 16 Sep | PATANJALI | 13:35 | 7.20 | 8.64 | TARGET_HIT | 1,075 | +1,548.00 |
+| 18 Sep | BHEL | 09:15 | 6.85 | 8.22 | TARGET_HIT | 2,625 | +3,596.25 |
+| 18 Sep | APLAPOLLO | 10:15 | 30.25 | 36.30 | TARGET_HIT | 350 | +2,117.50 |
+| 18 Sep | MAHABANK | 11:55 | 1.34 | 1.34 | LIQUIDITY_GUARD_ZERO_VOLUME | 6,500 | 0.00 |
+
+### Caveats specific to this change
+
+- **This is a real, live risk-parameter change affecting EVERY Luxury
+  position**, not just breakout-signal-sourced ones - a normal Chartink-
+  alert-driven Luxury trade now also rides to a much wider Rs5,000/2,500
+  profit-protection threshold and 8% giveback, and can lose up to
+  Rs5,500/3,100 (CE) or Rs4,500/2,600 (PE) before MAX_LOSS_HIT instead of
+  the old, tighter caps. That is a deliberate, larger risk-per-trade
+  trade-off in exchange for letting winners run - not free upside.
+- **Still the same 18-trade sample** - the config change was validated by
+  re-running the identical historical signals, not new data. The absence
+  of any PROFIT_PROTECTION_HIT in this specific sample doesn't guarantee
+  none will ever fire again at the new, higher threshold - it means none
+  of these particular 18 trades' peaks crossed it.
+- The MAX_LOSS_HIT cap is now also correspondingly larger (Rs5,500/3,100
+  vs Rs4,500/2,100) - the SAME kind of bad trade that used to cap out at
+  -Rs4,500 now caps out Rs1,000 worse per occurrence before/after 11:30.
+  This wasn't separately backtested against a scenario where a real trade
+  would have kept losing past the OLD cap - only the one MAX_LOSS_HIT
+  case in this sample (PAYTM) is visible, and it hit the cap in the very
+  first candle, so there's no evidence here of how much further it might
+  have fallen without a cap at all.
 
 ## Backtest functions vs. the real deployed functions (asked + verified 20 Sep 2026)
 
