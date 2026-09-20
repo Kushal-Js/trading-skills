@@ -176,6 +176,129 @@ symbol/day/direction, only the entry timing/confirmation differs).
   here - a live version of this signal would still have to clear all of
   those before an order actually gets placed.
 
+## Pattern in the 32 confirmed signals
+
+Pulled from `history/breakout_screener_vs_real_events_5min_recalibrated.json`:
+
+- **66% (21/32) fired at the very first 5-min candle of the day, 09:15.**
+  Because the consolidation window is only the prior 10 candles (50
+  minutes) and candle-fetching doesn't reset at day boundaries, a 09:15
+  signal's "prior 10 candles" are actually the PREVIOUS trading day's
+  last 10 candles - so what this is really catching is an **overnight
+  gap that continues immediately at the open**, not an intraday build-up.
+  The remaining 11 signals are scattered through the day (09:25 through
+  14:30) with no other clear clustering.
+- **Average consolidation range at signal time: 0.90%** (cap is 12%) -
+  confirmed breakouts are overwhelmingly coming out of genuinely FLAT,
+  quiet 50-minute windows, not already-choppy ones near the 12% ceiling.
+- **Average relative volume: 8.24x, max 70.66x.** These are not marginal
+  1.5x-threshold scrapes - when this fires, real volume is usually
+  multiples of what the bare minimum requires.
+- **Exit mix: 29 TARGET_HIT, 3 STOP_LOSS_HIT, 0 EOD_SQUAREOFF.** The
+  10%/3% ladder combined with this entry filter has so far never once
+  needed the EOD square-off - every signal resolved one way or the other
+  well before 15:15.
+- CE (17 signals, 94.1% win, +Rs42,217.60) outperformed PE (15 signals,
+  86.7% win, +Rs25,401.50) on this sample, consistent with the bucket
+  itself being CE-heavier most days (see [[alert-bucket-switch]]'s bucket
+  size counts).
+- PAYTM signalled 3 times, LTF and MAHABANK twice each - no other repeats.
+  Entry premiums span the full range (six trades under Rs5, six over
+  Rs50), so the result isn't concentrated in one premium tier.
+
+**Working theory, not yet independently verified**: this screener is
+functioning less like a generic "breakout finder" and more like a
+**gap-and-go filter** - flag a stock that was dead flat into the close/
+pre-open and then opens with a real, high-volume directional move. That
+would explain both the 09:15 clustering and the unusually clean win rate:
+a confirmed high-volume gap continuation is a much stronger, rarer signal
+than an ordinary intraday consolidation breakout.
+
+## Lifecycle of an adopted breakout signal
+
+This traces the exact path a signal takes in the backtest, end to end -
+written to double as a spec for what a live version would need to
+replicate. Nothing below is wired into any live package yet.
+
+**1. Alert received** - Chartink posts to one of the bot's existing real
+webhook endpoints (`/chartink/webhook` / `/chartink/webhook-sell` for
+Options, and Futures'/Luxury's own buy/sell equivalents) - the exact same
+entry point real trading already uses, not a new endpoint.
+
+**2. Bucket recording (bookkeeping only)** - Inside that same request
+handler, `alert_bucket.record_alert(option_type, stocks, strategy,
+scan_name)` fires-and-forgets, tagging every stock in the alert into
+today's CE or PE bucket with `first_alert_at`/`alert_count`/`strategies`/
+`scans`. This happens for every alert regardless of whether the bot ends
+up trading it for real - see [[alert-bucket-switch]] for the full bucket
+design. (The backtest reconstructs this same bucket historically from
+`webhook_alerts.log`, since the raw log never stored which endpoint - buy
+or sell - received each alert; recovered via the scan_name -> option_type
+table in [[alert-bucket-switch]], 100% coverage.)
+
+**3. Screening - walk the symbol's own real 5-min candles forward, never
+looking ahead.** For each completed 5-min candle, using only that candle
+and the 10 before it:
+  - **Rule 1 - Consolidation**: over the prior 10 candles,
+    `consolidationHigh = max(open, close)` per candle,
+    `consolidationLow = min(open, close)` per candle. Range% =
+    `(high - low) / low * 100` must be **<= 12%** - the prior 50 minutes
+    must have been genuinely quiet.
+  - **Rule 2 - Breakout/breakdown clearance**: CE bucket (bullish) needs
+    `close >= consolidationHigh * 1.005` (>=0.5% clean break above);
+    PE bucket (bearish, mirrored) needs `close <= consolidationLow *
+    0.995` (>=0.5% below).
+  - **Rule 3 - Candle body size**: `|close - open| / open * 100 >= 1%` -
+    the breakout candle itself has to be a real, decisive move, not a
+    tiny wick-through.
+  - **Rule 4 - Relative volume**: this candle's volume `>= 1.5x` the
+    average volume of those same prior 10 candles.
+  - **Rule 5 - Liquidity**: the average of the last 20 DAILY volumes
+    (fetched only through the day BEFORE the scan day - no look-ahead)
+    must be `>= 500,000` shares/day.
+  - **Rule 6 - Market cap: DROPPED.** The original spec's Yahoo-based
+    check has no Dhan equivalent here; every symbol in these buckets is
+    already a real NSE F&O name, so this was never going to reject
+    anything in this universe anyway.
+  - **Rule 7 - Price level**: close within 10% of the 20-day OR 50-day
+    closing high (CE) / low (PE, mirrored).
+  - **Rule 8 - Trend**: CE needs close above BOTH the 20-day and 50-day
+    SMA of daily closes; PE (mirrored) needs close below both.
+  - The **first** candle in that trading day where ALL of rules 1-5,7,8
+    hold at once is that symbol's one confirmed signal for the day - it
+    cannot signal again later the same day even if it re-qualifies.
+
+**4. Adoption - resolve and enter the real option contract.** At the
+signal candle's own close (used as spot), resolve the real ATM contract
+for that option_type (nearest strike to spot, nearest listed expiry) from
+the live Dhan instrument master - the exact same resolution production's
+own entry path uses. Entry price = that contract's own next available
+1-minute candle's real OPEN after the signal fires (simulating "send a
+market order right after confirmation"). Quantity = that contract's real
+lot size x Options' `QUANTITY_LOTS` - never the triggering symbol's own
+size, a lesson [[alert-bucket-switch]] already paid for once with a
+lot-size mismatch bug.
+
+**5. Exit - the ladder.** Target = entry x 1.10 (Options' `TARGET_PCT`),
+hard stop = entry x 0.97 (Options' `STOP_LOSS_PCT`). Walk the contract's
+own real 1-minute candles forward from entry: the first candle whose
+high/low crosses either level exits AT that level (or at that candle's
+own open if it gapped straight past it - the corrected fill logic, see
+above); if neither is hit by Options' `SQUARE_OFF_TIME` (15:15 IST),
+exit at the last available close. On this sample every single signal
+resolved via target or stop - EOD square-off never fired once.
+
+**6. Bookkeeping.** The realized PnL is tagged "ALSO REAL" (the bot also
+traded this exact symbol for real that day) or "NEW" (the bot never
+touched it) and rolled into the totals above.
+
+**What a live version would still be missing**: none of production's
+real entry gates (RSI/trend, volume floor, liquidity, funds, cross-
+strategy claim, daily re-entry cap) run in this pipeline - a live signal
+would still have to clear every one of those before an order could
+actually go out, exactly as [[alert-bucket-switch]]'s own switch mechanism
+does.
+
 ## What's still open
 
 This is backtest evidence only - nothing is wired into any live package,
