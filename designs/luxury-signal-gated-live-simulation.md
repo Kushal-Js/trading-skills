@@ -109,9 +109,85 @@ silent fail-opens masking a broken check.
   False`'s effect on this specific result is untested even though the
   mechanism was built to handle it correctly.
 
+## Backtest functions vs. the real deployed functions (asked + verified 20 Sep 2026)
+
+**The backtest does NOT call the actual deployed global functions** - it
+replicates their LOGIC and reads their EXACT config thresholds, but as
+separate implementations. Grep-confirmed none of these appear anywhere
+in `backtest_luxury_signal_gated_live.py`:
+- `Luxury/position_store.py`'s `_cap_for()` / `_in_burst_window()` (the
+  real burst-slot capacity function)
+- `dhan_client.get_liquid_atm_option()` (the real global liquid-contract
+  resolver, shared by every live-trading package)
+- its internal helpers `_is_contract_liquid_and_active()` /
+  `_nearby_option_candidates()`
+- `refresh_liquidity_signal()` / `get_cached_illiquid()` (the live
+  caching layer those helpers depend on)
+
+**Why they couldn't be called directly**: all of them are built for LIVE
+operation - they read `datetime.now()` and/or an in-process cache
+(`get_cached_illiquid` only holds a value if something already queried
+that exact contract right now) with no "as of this past timestamp"
+parameter. A backtest walking through 2 September as if it were "now"
+has no way to ask a wall-clock-bound function about a moment three weeks
+in the past, so `resolve_liquid_contract()` and the inline burst-window
+capacity check in `run()` reconstruct the same decision from real
+historical Dhan data instead.
+
+## If this were ever actually deployed live
+
+This matters for scoping future work, not just as trivia: **almost none
+of the entry-gate logic above would need to be newly written**. A live
+version only needs ONE new thing - a background loop that watches
+Luxury's own bucket symbols' real 5-min candles and evaluates the 8
+rules, calling Luxury/trading_engine.py's existing `_process_one_entry(
+symbol, "CE")` the moment a signal confirms, exactly like the real
+Chartink-webhook handler already does today. Everything downstream of
+that one call is the REAL, unmodified production pipeline, inherited for
+free:
+- `position_store.reserve_symbol()` -> internally calls the REAL
+  `_cap_for()`/`_in_burst_window()` - the burst slot is automatic, no
+  reimplementation needed.
+- `cross_strategy_registry.try_claim()` - the REAL momentary claim, not
+  this backtest's interval-overlap proxy.
+- `dhan_wrapper.has_open_position_for_underlying()` - REAL broker check.
+- `_enter_single_position()` calling `dhan_wrapper.get_liquid_atm_option(
+  )` - the REAL liquid-contract resolver, with its REAL
+  `_is_contract_liquid_and_active()`/`_nearby_option_candidates()`/
+  `refresh_liquidity_signal()`/`get_cached_illiquid()` machinery, live
+  and current rather than historically reconstructed.
+- `reversal_filters.check_option_liquidity()` - REAL entry-time
+  liquidity re-check.
+- `fund_allocation.has_sufficient_bucket_funds()` - REAL, and would
+  actually work correctly live (a genuine real-time balance/margin
+  check), unlike this backtest which could only assume it always passes.
+- `count_opened_today`/`loss_count_today`/`loss_exit_count_today`
+  (trade_history.py), `reversal_filters.check_trend_strength()`,
+  `dhan_wrapper.is_rsi_loss_reentry_blocked()` - all REAL, unmodified.
+
+**The one place a live version would genuinely differ from this
+backtest's own numbers - the EXIT side.** This backtest only modeled a
+fixed target(+20%)/hard-stop(-16%) pair. A real position, once created,
+is managed by Luxury's existing `monitor_loop`/`_check_one_position`/
+`_exit_reason_for` - which checks, in order: `MAX_LOSS_HIT` (an absolute
+rupee cap, tighter before `RISK_THRESHOLD_CUTOFF_TIME`), `TARGET_HIT`,
+`PROFIT_PROTECTION_HIT` (locks in profit above a rupee threshold with a
+giveback buffer), a **dynamic trailing stop-loss** that ratchets tighter
+as price rises (`TRAILING_SL_HIT`/`STOP_LOSS_HIT`), `SUPERTREND_EXIT`,
+and `LIQUIDITY_GUARD_ZERO_VOLUME` (exits early on a thinly-traded
+contract going quiet). None of these are modeled here. A live-deployed
+version of this signal would very plausibly exit earlier and differently
+than this backtest's clean target/stop pair suggests - **this backtest's
++Rs71,479.70 delta should not be read as what a live version would
+actually produce on the exit side, only as evidence the ENTRY signal
+itself finds genuinely strong setups.**
+
 ## What's still open
 
 Backtest evidence only, per [[feedback-live-trading-safety]] - nothing
 wired live regardless of how this reads. See [[breakout-scanner-vs-real-
 pnl]]'s own "what's still open" for the same standing next-step options
-(more data, a new parallel signal source, or leave documented).
+(more data, a new parallel signal source, or leave documented). If a live
+version is ever built, the real integration point is a single new
+`_process_one_entry()` call from a new 5-min signal-watcher loop - not a
+rewrite of any existing gate.
