@@ -98,6 +98,28 @@ judge yet - flagged explicitly).
 | Risk config raised: MAX_LOSS 5,500/3,100 CE / 4,500/2,600 PE, PROFIT_PROTECTION_THRESHOLD 5,000/2,500, giveback 8% | Luxury | Same raise, Luxury side - see [[luxury-signal-gated-live-simulation]]'s "Config raise" section (+Rs73,999.10 delta on the same 18-trade signal-gated sample) | Not yet |
 | **Breakout-signal scanner made the SOLE real entry path** (not an additional gate) - `_handle_chartink_webhook` no longer calls `enter_positions_for_stocks` at all for any of the 3; a raw alert only records into the watchlist now. Options widened from PE-only to full CE+PE parity, `OPTIONS_BREAKOUT_SIGNAL_ENABLED` defaulted to true. Same commit fixed the WS market-feed thread-death bug for real (watchdog + exponential backoff, see [[market-feed-thread-death-on-429]]). | Options, Luxury, Futures | Deployed via a separate, parallel Claude Code session on the user's own instruction (commit `b889608`, hotfixed by `db07226` for an accidental `alert_bucket` import break) - explicitly **not backtested as a sole-gate config**, only ever backtested as an additional layer (the two rows above, and [[futures-breakout-signal-gated-live-full-real-gates]]). | **Measured same-day**: 19 trades opened before the 10:07 IST cutover, **0 trades opened in the 2+ hours after** (through 12:26 IST) - the normal alert-driven path's removal, combined with the scanner firing only once all session (see 21 Sep monitoring log above), has visibly collapsed trade frequency. Worth a deliberate decision on whether this is the intended tradeoff before relying on it further. |
 
+**Backtest of the sole-entry-path config against today's own real alerts**
+(user request, same day): replayed every real Chartink alert received
+today (09:15 IST onward) through the breakout-only logic for all 3
+strategies together (one shared cross-strategy lock, each strategy's
+own real risk config) - see `backtest_today_sole_entry_all_strategies.py`.
+Result: only **5 signals qualified all morning** across Options/Luxury/
+Futures combined (Futures: zero), all 5 entered - CGPOWER (Luxury CE,
++Rs2,125, TARGET_HIT), INDHOTEL (Options CE, +Rs1,730, TARGET_HIT),
+BANDHANBNK (Luxury CE, +Rs504, LIQUIDITY_GUARD_ZERO_VOLUME), LICI
+(Options PE, -Rs798, TRAILING_SL_HIT), plus a likely-phantom duplicate
+INDHOTEL entry on Luxury (same candle, same fill, same instant TARGET_HIT -
+the simulation's interval-based cross-strategy lock let both hypothetical
+strategies claim it since the position round-tripped within one candle,
+which the real momentary lock would not have allowed). Total **+Rs5,291.00
+as simulated, more realistically ~+Rs3,561 excluding the phantom
+duplicate.** Notably, CGPOWER's signal fired for real too (09:21:03) but
+was skipped live (`duplicate_or_capacity_full` - Luxury's real CE
+capacity was already full from the now-removed normal-entry path) -
+in this counterfactual, that capacity was free instead. One morning is
+too small a sample to draw a hit-rate conclusion from (4W/1L here) - see
+the caveat on every other backtest in this repo.
+
 **Issue**: first restart attempt for the Futures risk-config deploy hit
 a transient PIN+TOTP login failure (`Invalid TOTP`) - systemd's
 `Restart=always` auto-recovered on the 2nd attempt within seconds, no
