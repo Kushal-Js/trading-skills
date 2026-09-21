@@ -274,6 +274,46 @@ both landed in today's file, not two separate day-buckets. No effect on
 the ACTIVE window today (today is always included regardless), but worth
 knowing if the daily-file audit trail is ever inspected later.
 
+**Broker SL-L bug found and fixed (user request: "investigate into it") +
+Friday square-off moved 15:20->15:25 (user request), commit `e70804d`,
+restart 16:30 UTC / 22:00 IST**: investigated a real error from this
+morning (LICI, Options, 09:19 IST) - full writeup
+[[2026-09-21-lici-negative-broker-sl-trigger]]. Root cause: for a
+cheap-premium, large-quantity position whose entire notional value is
+already below the rupee MAX_LOSS cap, `_place_broker_stop_loss_if_
+enabled`'s trigger-price formula computes a NEGATIVE price (LICI:
+fill=0.70, qty=1400, cap=Rs3,500 -> trigger=-1.80), which Dhan correctly
+rejects. Same bug confirmed in all 3 packages (identical formula). Real
+risk impact was low - the percentage-based `STOP_LOSS_PCT` hard stop
+(poll/tick-driven, unaffected) still protected the position; only the
+redundant broker-side layer was missing for this one trade. Fixed
+identically in all 3: skip broker SL placement cleanly (INFO, not ERROR)
+when `trigger_price <= 0`.
+
+Also moved `FRIDAY_SQUARE_OFF_TIME` 15:20->15:25 across all 3 packages
+per explicit user request ("not carry forward any position after Friday
+15:25 PM, square them off") - this rule already existed
+(`ENABLE_FRIDAY_SQUARE_OFF=true` since 26 Aug 2026), only the cutoff time
+itself changed. **Real deploy mistake caught and corrected same session**:
+the first restart only changed the CODE DEFAULT, but `.env` had explicit
+`FRIDAY_SQUARE_OFF_TIME=15:20`/`FUTURES_FRIDAY_SQUARE_OFF_TIME=15:20`
+overrides that silently shadowed it - Options and Futures were still
+running 15:20 after that restart, only Luxury (no override) picked up
+the change. Caught by explicitly checking the EFFECTIVE runtime value on
+the droplet after the first restart, not just trusting the code diff;
+fixed `.env`, re-synced, restarted again, and re-verified all three
+packages' actual runtime `FRIDAY_SQUARE_OFF_TIME` read 15:25 before
+calling it done. Lesson: a code-default change to a value that also has
+a live `.env` override does NOT take effect until the override is found
+and changed too - always verify the EFFECTIVE value post-deploy, not
+just that the code changed.
+
+Pre-restart (both restarts): confirmed zero open positions on all 4
+packages. Post-restart (both): clean startup, dispatcher restarted
+correctly, universe_bucket's 44 CE/90 PE symbols survived intact,
+`/health` OK, only the same pre-existing unrelated `swing_signals`
+tracebacks in the log.
+
 ### 20 Sep 2026
 
 | Change | Strategy | Backtest evidence | Real PnL since |
@@ -408,6 +448,7 @@ but have no directly-attributable real before/after PnL here.
 | 21 Sep | [[market-feed-thread-death-on-429]] | Dhan SDK bug (vendored `dhanhq` MarketFeed thread dies silently on a 429), not this repo's own code. No trading-correctness impact - REST fallback covered every exit check throughout. Fix not yet built. |
 | 21 Sep | Swing MCX PnL logging bug (this journal, no separate incident file) | `record_closed_trade()` understated every Swing MCX trade's logged PnL by orders of magnitude (used lot-count `quantity` instead of `pnl_multiplier`). No trading-decision impact - only the historical log was wrong, live exit decisions always used the correct multiplier. Fixed (`ca7a173`), pulled to droplet, restart deliberately deferred by user. |
 | 21 Sep | [[local-backtest-dhan-session-collision]] | A local backtest script's own Dhan re-authentication invalidated the live bot's session, forcing one real, unplanned `dhanboy.service` restart. No open positions affected (confirmed via `/health`/`/positions` before and after). Fixed for future local scripts: use a user-supplied hand-off `access_token` instead of a competing local `pin_totp` login; defer bulk historical-data pulls to after market close (separate shared-rate-limit issue, not fixed by the access-token change). |
+| 21 Sep | [[2026-09-21-lici-negative-broker-sl-trigger]] | LICI (Options PE) broker-side SL-L order rejected - trigger price went negative for a cheap-premium/large-quantity position whose notional value was already below the rupee MAX_LOSS cap. Same bug in all 3 packages, fixed same day (commit `e70804d`). Real risk impact low - percentage-based STOP_LOSS_PCT hard stop was unaffected the whole time. |
 
 ## Live monitoring sessions
 
