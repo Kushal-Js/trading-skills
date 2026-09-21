@@ -217,6 +217,37 @@ state" pattern, self-healing via cached values); `/health` and
 responding; droplet RAM 521Mi available post-restart, swap barely touched,
 `systemctl is-active` = active.
 
+**Bucket ARMED with real candidates, 21:19 IST** - user's own two Chartink
+screener exports (`~/Desktop/future/01 Simply Bull.csv` -> CE,
+`01 Simply Bear.csv` -> PE), last 2 distinct CSV dates (2026-09-18,
+2026-09-21) unioned and deduplicated, POSTed directly to the LIVE
+`/universe-bucket/webhook` (44 symbols) and `/webhook-sell` (90 symbols) -
+same endpoints a real Chartink scan would hit, per explicit user
+instruction ("push it in a droplet as this was live data from the two
+webhooks I have integrated... make sure this data is inserted into both
+these two buckets in droplet"). All 134 symbol-pushes F&O-eligible
+(checked locally first via the hand-off-token pattern, zero dropped).
+Confirmed via `GET /universe-bucket` and `journalctl` (clean webhook log
+lines, only the same pre-existing unrelated `swing_signals` tracebacks in
+the surrounding window, `/health` OK).
+
+**Real consequence, stated plainly**: this is the bucket the ALREADY-LIVE
+dispatcher (`UNIVERSE_DISPATCHER_ENABLED=true`) reads every scan cycle.
+Pushed at 21:19 IST, well after market close, so nothing fired tonight
+(`_market_hours_now()` blocks it) - but the bucket now has 44 CE + 90 PE
+real candidates sitting in it, and at the NEXT market open (09:15 IST,
+2026-09-22) the dispatcher will autonomously evaluate every one of them
+for a real breakout/breakdown and can place REAL Luxury/Futures orders on
+any that qualify, with NO further per-trade confirmation - exactly the
+behavior already authorized when `UNIVERSE_DISPATCHER_ENABLED` was set
+true, now with real symbols in the bucket for the first time instead of
+an empty/inert one. One caveat on the mechanism itself: the webhook
+always records into the CALLING day's own file (today, 09-21) regardless
+of which original CSV date a symbol came from - the 09-18 and 09-21 rows
+both landed in today's file, not two separate day-buckets. No effect on
+the ACTIVE window today (today is always included regardless), but worth
+knowing if the daily-file audit trail is ever inspected later.
+
 ### 20 Sep 2026
 
 | Change | Strategy | Backtest evidence | Real PnL since |
