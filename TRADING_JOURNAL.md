@@ -48,11 +48,11 @@ weekends or genuinely zero activity).
 | 09 Sep | 0 | 0.00 | 0 | 0.00 | 8 | -3,857.50 | 0 | 0.00 | **-3,857.50** |
 | 10 Sep | 28 | +4,809.50 | 0 | 0.00 | 6 | -1,402.50 | 0 | 0.00 | **+3,407.00** |
 | 11 Sep | 18 | -11,470.75 | 2 | -3,622.50 | 1 | -1,338.75 | 0 | 0.00 | **-16,432.00** |
-| 15 Sep | 28 | +3,957.00 | 2 | +5,227.50 | 0 | 0.00 | 2 | -4,083.54 | **+5,100.96** |
+| 15 Sep | 28 | +3,957.00 | 2 | +5,227.50 | 0 | 0.00 | 2 | -435.00 | **+8,749.50** |
 | 16 Sep | 12 | -10,095.50 | 4 | -8,603.30 | 3 | +6,139.25 | 0 | 0.00 | **-12,559.55** |
-| 17 Sep | 8 | -3,918.75 | 23 | -5,741.75 | 26 | +5,130.00 | 8 | -3,772.29 | **-8,302.79** |
-| 18 Sep | 5 | -5,823.75 | 15 | -2,139.00 | 33 | -10,700.60 | 2 | -0.24 | **-18,663.59** |
-| **Total** | | **-31,974.75** | | **-11,943.55** | | **-17,909.35** | | **-15,649.82** | **-77,477.47** |
+| 17 Sep | 8 | -3,918.75 | 23 | -5,741.75 | 26 | +5,130.00 | 8 | -3,247.50 | **-7,778.00** |
+| 18 Sep | 5 | -5,823.75 | 15 | -2,139.00 | 33 | -10,700.60 | 2 | +837.50 | **-17,825.85** |
+| **Total** | | **-31,974.75** | | **-11,943.55** | | **-17,909.35** | | **-10,638.75** | **-72,466.40** |
 
 **Every strategy is net negative over this window.** No config change
 made in this period had turned the real trajectory positive by 18 Sep -
@@ -60,6 +60,18 @@ this is the baseline every deployment below should be measured against
 once enough real trades accumulate under each new config to judge it
 fairly (a handful of days is not enough, per the caveat every backtest
 in this repo already carries).
+
+**Correction (21 Sep 2026)**: the Swing column and totals above are
+CORRECTED from the original version of this table. The bot's own
+`real_trades.log` understated every Swing MCX trade's (COPPER/
+CRUDEOIL/NATURALGAS) PnL by orders of magnitude due to a logging bug
+(see "PnL logging bug" under 21 Sep in the Deployment timeline, and the
+new Known Issues row) - e.g. 17 Sep's real MAX_LOSS_HIT on COPPER was
+logged as -Rs1.89 but was actually **-Rs4,725.00**. Recomputed directly
+from each trade's real entry/exit price and MCX_PNL_MULTIPLIER, not
+from the logged `pnl` field. Non-MCX trades (Options/Futures/Luxury,
+and Swing's own non-MCX symbols) were never affected - only Swing's 3
+MCX symbols were.
 
 *(This table should be re-pulled and appended to periodically - see
 "How to maintain this" below.)*
@@ -93,6 +105,23 @@ live-position impact. Separately, a Dhan Marketfeed WebSocket incident
 this same window - see [[market-feed-thread-death-on-429]] below; not
 caused by these deployments, and bot correctness was never at risk
 (REST fallback covered every exit check throughout).
+
+**PnL logging bug fixed** (found during a user-requested live loss
+analysis): `trade_history.py`'s `record_closed_trade()` multiplied by
+`pos.quantity` unconditionally when computing the PnL to log. Correct
+for Options/Futures/Luxury (quantity IS the real rupee multiplier for
+them), but wrong for Swing's MCX positions - `quantity` there is just
+the lot count (1), while the real rupee-per-point value lives in
+`pos.pnl_multiplier` (e.g. 2500 for COPPER), exactly as Swing's own
+live exit-decision code already uses. A real -Rs4,600 COPPER loss
+today was logged as -Rs1.84. Fixed with a `getattr` fallback so
+Options/Futures/Luxury (no `pnl_multiplier` attribute) are unaffected -
+committed (`ca7a173`) and pulled to the droplet, but **not yet
+restarted** (deliberately deferred by the user - the running process
+still has the old buggy logic in memory until the next restart). The
+"Real PnL trajectory" table above has already been corrected using the
+true entry/exit prices, independent of whether the running bot has
+picked up the code fix yet.
 
 ### 20 Sep 2026
 
@@ -226,6 +255,7 @@ but have no directly-attributable real before/after PnL here.
 | 18 Sep | [[abb-ltp-blackout-max-loss-overshoot]] | Another MAX_LOSS_HIT overshoot, different root cause than 28 Aug |
 | 18 Sep | [[standalone-test-real-auth-attempt-swing-mcx]] | Test infra, Swing/MCX auth leak variant |
 | 21 Sep | [[market-feed-thread-death-on-429]] | Dhan SDK bug (vendored `dhanhq` MarketFeed thread dies silently on a 429), not this repo's own code. No trading-correctness impact - REST fallback covered every exit check throughout. Fix not yet built. |
+| 21 Sep | Swing MCX PnL logging bug (this journal, no separate incident file) | `record_closed_trade()` understated every Swing MCX trade's logged PnL by orders of magnitude (used lot-count `quantity` instead of `pnl_multiplier`). No trading-decision impact - only the historical log was wrong, live exit decisions always used the correct multiplier. Fixed (`ca7a173`), pulled to droplet, restart deliberately deferred by user. |
 
 ## Open questions worth resolving (found while compiling this journal)
 
