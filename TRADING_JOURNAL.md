@@ -147,6 +147,33 @@ still has the old buggy logic in memory until the next restart). The
 true entry/exit prices, independent of whether the running bot has
 picked up the code fix yet.
 
+**All-F&O-universe breakout-signal backtest, 14 days** (user request:
+"what if the scanner watched every F&O stock, not just alerted symbols"):
+full detail in [[all-fno-universe-breakout-signal-15day-backtest]], report
+artifact https://claude.ai/artifact/X7Adfi1Er4spdDzsDGjbfD. All 210
+F&O-eligible symbols, both directions, all 14 real trading days
+(2026-08-31 to 2026-09-18), replayed through each package's own real entry
+gates and exit ladder (verified-live shared thresholds: clearance=0.15%,
+body>=0.5%, relvol>=0.8x). Result: **469 sim trades, 78.0% win rate,
++Rs756,644.71 raw / +Rs688,954.19 with 20 confirmed exact-duplicate trades
+(Rs67,690.52) removed**, vs real (Options+Luxury+Futures) 284 trades,
+36.6% win rate, -Rs61,827.65 over the same 14 days. **Big caveats, not a
+green light**: (1) real PnL here is almost entirely under the OLDER
+alert-ranked entry logic, not this same screener - breakout-signal-gated
+entry only became the sole real path earlier today, so this compares two
+different entry-logic generations, not just two universe sizes; (2) the
+same same-instant triple-counting pattern already seen in the "5 signals"
+backtest just above this one (the "likely-phantom duplicate INDHOTEL"
+case) shows up here at real scale - a `close_t <= t` non-strict-inequality
+bug in the shared cross-strategy-lock pruning, still open, not yet fixed
+in code; (3) no funds/margin cap modeled, which matters far more at
+210-symbol scale than in any narrower prior backtest. Also produced two
+real operational findings while running it (local Dhan session collided
+with the live bot's own session, forced one real `dhanboy.service`
+restart with no open-position impact; separately hit shared Dhan
+rate-limit contention with the live bot during market hours) - see
+[[local-backtest-dhan-session-collision]].
+
 ### 20 Sep 2026
 
 | Change | Strategy | Backtest evidence | Real PnL since |
@@ -280,6 +307,7 @@ but have no directly-attributable real before/after PnL here.
 | 18 Sep | [[standalone-test-real-auth-attempt-swing-mcx]] | Test infra, Swing/MCX auth leak variant |
 | 21 Sep | [[market-feed-thread-death-on-429]] | Dhan SDK bug (vendored `dhanhq` MarketFeed thread dies silently on a 429), not this repo's own code. No trading-correctness impact - REST fallback covered every exit check throughout. Fix not yet built. |
 | 21 Sep | Swing MCX PnL logging bug (this journal, no separate incident file) | `record_closed_trade()` understated every Swing MCX trade's logged PnL by orders of magnitude (used lot-count `quantity` instead of `pnl_multiplier`). No trading-decision impact - only the historical log was wrong, live exit decisions always used the correct multiplier. Fixed (`ca7a173`), pulled to droplet, restart deliberately deferred by user. |
+| 21 Sep | [[local-backtest-dhan-session-collision]] | A local backtest script's own Dhan re-authentication invalidated the live bot's session, forcing one real, unplanned `dhanboy.service` restart. No open positions affected (confirmed via `/health`/`/positions` before and after). Fixed for future local scripts: use a user-supplied hand-off `access_token` instead of a competing local `pin_totp` login; defer bulk historical-data pulls to after market close (separate shared-rate-limit issue, not fixed by the access-token change). |
 
 ## Live monitoring sessions
 
