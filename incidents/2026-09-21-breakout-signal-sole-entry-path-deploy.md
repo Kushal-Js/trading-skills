@@ -168,3 +168,42 @@ that silently contained unrelated WIP:
   correct behavior here, not friction to route around - it's exactly the
   kind of hard-to-reverse, live-system-affecting action that standing
   practice says should get a human in the loop, especially mid-incident.
+
+## Follow-up: BREAKOUT_SIGNAL_ENABLED made a genuine two-way switch (same day)
+
+User caught a real gap after the sole-entry-path deploy above: `BREAKOUT_
+SIGNAL_ENABLED` only ever gated the scanner's own entry attempts, not the
+webhook. Once `_handle_chartink_webhook` stopped calling `enter_positions_
+for_stocks` at all, there was no fallback left - setting the flag `false`
+would have silently dropped a package to ZERO real trades instead of
+restoring the old webhook-ranked entry, which is what the user actually
+expected a "disable the breakout scanner" flag to do.
+
+**Fix**: `_handle_chartink_webhook` (all 3 packages) now branches on the
+flag explicitly:
+- `True` (default, unchanged from the sole-entry-path deploy) - queue
+  into `breakout_signal`'s watchlist only, scanner decides.
+- `False` - falls through to a new `_enter_directly_from_webhook`, the
+  pre-21-Sep-2026 direct ranked-entry path restored **byte-for-byte**
+  (pulled from `git show ca7a173:<path>`, not reconstructed from memory) -
+  trading-window/cutoff/square-off checks, gap-down CE delay, capacity,
+  `rank_and_pick_top_stocks`/ribbon ranking, `enter_positions_for_stocks`.
+
+Flag values themselves unchanged (still `true` everywhere) - this deploy
+activated a dormant capability without changing any currently-live
+behavior, which is why it was safe to ship immediately despite being a
+real-money code path, mid-session, with one open Swing position at
+restart time (NATURALGAS PUT - unrelated to this change, reconciled
+correctly as always).
+
+**Verified before deploying**: a new behavioral test exercising BOTH
+branches for all 3 packages (flag=True never calls `enter_positions_
+for_stocks`; flag=False calls it with the correctly-ranked candidates),
+plus the usual syntax/import/full-pytest-diff checks (zero regressions,
+identical failure set to the prior verified baseline).
+
+**To actually disable the breakout scanner for one package** and go back
+to plain webhook-ranked entry: set e.g. `FUTURES_BREAKOUT_SIGNAL_
+ENABLED=false` in `.env` (both local and droplet), scp, restart. The
+other two packages are independently controlled by their own `OPTIONS_`/
+`LUXURY_` prefixed copies of the same flag.
