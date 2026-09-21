@@ -88,6 +88,15 @@ evidence" links to the `designs/` doc where a real backtest exists;
 under that specific config to judge it (many recent rows are too new to
 judge yet - flagged explicitly).
 
+### 22 Sep 2026
+
+| Change | Strategy | Backtest evidence | Real PnL since |
+|---|---|---|---|
+| `universe_bucket.py`'s `WINDOW_TRADING_DAYS` lowered 3->1 (`UNIVERSE_BUCKET_WINDOW_TRADING_DAYS`) + fixed `universe_dispatcher_loop` to actually WS-subscribe symbols (it never did - only an older, now dispatcher-bypassed code path did) | Luxury, Futures (dispatcher targets) | User request, straight off the ~13.4-min-per-full-pass latency finding in [[ws-candle-reconstruction-parity-results]] (134 symbols / 10-per-60s scan cadence). No backtest - operational config change. | N/A - the window change is forward-looking only; see the data-quality finding below for why it didn't shrink 21 Sep's own count. |
+| `ws_candle_parity_check.py` subscribe time moved 11:00 -> 10:00 IST | Cross-cutting | User request | N/A - infra timing only |
+
+**Data-quality finding while investigating the above**: the user uploaded real Chartink CSV exports ("01 Simply Bull.csv"/"01 Simply Bear.csv", the CE/PE screeners feeding `universe_bucket.py`) and asked to cross-check them against the bot's own 21 Sep bucket (44 CE / 90 PE at the time). The real 21-Sep-only counts were **19 CE / 57 PE** - the bot's persisted `2026-09-21_universe_bucket_{CE,PE}.json` files had an `alert_names` field reading `"Simply Bull - manual backfill (last 2 days: 2026-09-18, 2026-09-21)"` - confirming a manual backfill (from a parallel session, not this one) had merged BOTH 18-Sep's and 21-Sep's real alerts into the SAME 21-Sep-dated file. Verified exactly: CSV's (18-Sep unique ∪ 21-Sep unique) = 44 CE / 90 PE, matching the contaminated file precisely; every real 21-Sep symbol was already present (nothing missing, only 25 CE + 33 PE extras from 18-Sep to remove). Corrected both files to the true 19/57 on the droplet. **No restart needed and no live effect** - by the time this was found, the calendar date had already rolled to 22 Sep and `WINDOW_TRADING_DAYS=1` means the live bot's active window no longer reads 21 Sep's file at all; this was purely a historical-record accuracy fix, not an operational change. Lesson: a "manual backfill" that back-dates alerts across multiple real days into one file's own date silently defeats any window-based sizing control on that file specifically, no matter how the window itself is configured - worth remembering if another backfill is ever done this way again.
+
 ### 21 Sep 2026
 
 | Change | Strategy | Backtest evidence | Real PnL since |
