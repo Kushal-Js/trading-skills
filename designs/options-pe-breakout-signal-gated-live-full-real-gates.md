@@ -1,5 +1,13 @@
 # Options PE + breakout-signal gate, full real-gate replication (21 Sep 2026, user request)
 
+Status: **BUILT, not yet deployed** (21 Sep 2026, same day as the
+backtest below) - the live version was built as a feature-flagged,
+PE-only wiring of the unchanged `breakout_signal.py` module into
+Options, alongside the [[2026-09-21-market-feed-thread-death-on-429]]
+backoff fix, for a single combined deploy per the user's own
+instruction. See "Live build" section near the bottom for exactly what
+was wired and how to arm it.
+
 Follow-up to the user flagging that Options' real PE PnL over the
 recent window looked weak. Same treatment already given to
 [[luxury-signal-gated-live-simulation]] and
@@ -155,14 +163,57 @@ this result - not tested here.
   answer whether the missed 14 signals were similarly high-quality or not
   - not done here, flagged as the natural next step if this is pursued
   further.
-- This is a HYPOTHETICAL - Options does not have the breakout-signal
-  scanner deployed today (only Luxury does; `breakout_signal.py` itself
-  is fully generic per-strategy/per-direction already, so wiring Options
-  in would need no new scanner logic, only a new `signal_scanner_loop`
-  call from Options' own lifespan, same as the "if this were ever
-  actually deployed live" note in
-  [[luxury-signal-gated-live-simulation]]). Nothing here changes any
-  live config; evaluation only, per [[feedback-live-trading-safety]].
+- Was a HYPOTHETICAL when this backtest was written - now BUILT (see
+  "Live build" below) but still **not deployed/armed**. Nothing has
+  changed any live config yet.
+
+## Live build (21 Sep 2026, same day, user request)
+
+Wired `breakout_signal.py` into Options **unchanged** - no scanner-logic
+changes, exactly the same module Luxury/Futures already import. Three
+touch points, all in the `dhanBoy` branch:
+
+1. **`Options/config.py`** - new `BREAKOUT_*` block, same shape as
+   Luxury/Futures' own, env-prefixed `OPTIONS_BREAKOUT_*`. Defaults match
+   this backtest's own thresholds exactly (clearance=0.3%, body=0.5%,
+   relvol=1.2x, `OPTIONS_BREAKOUT_MIN_AVG_DAILY_VOLUME`=500000, etc. - see
+   the file itself for the full list, all overridable via env var).
+   **`BREAKOUT_SIGNAL_ENABLED` (`OPTIONS_BREAKOUT_SIGNAL_ENABLED`)
+   defaults `false`** - deliberately different from Luxury/Futures' own
+   flags (both default `true`, but those were already-reviewed-live
+   features when added; this is new/unarmed until the user explicitly
+   flips it on post-deploy, per [[feedback-live-trading-safety]]).
+2. **`Options/option_main.py`** - `_breakout_entry_fn` (byte-for-byte the
+   same pre-entry-gate wrapper pattern as Luxury's own), a new
+   `signal_scanner_loop("Options", config, _breakout_entry_fn)` task
+   started unconditionally in `lifespan` (matches breakout_signal.py's
+   own design - the loop's daily watchlist refresh housekeeping needs to
+   run regardless of whether scanning itself is flag-enabled), and a new
+   read-only `GET /breakout-signal` status endpoint mirroring Luxury's.
+3. **PE-only scoping, the one real design choice here**: `breakout_
+   signal.record_alert(...)` is called ONLY from inside `_handle_chartink_
+   webhook` when `option_type == "PE"` (i.e. only from `/chartink/
+   webhook-sell`) - never from the CE path (`/chartink/webhook`). Since
+   nothing ever feeds the CE watchlist, it stays permanently empty and
+   the generic per-package module's own CE-side machinery is structurally
+   inert for Options - a deliberate scope match to what was actually
+   backtested (PE only), without needing any CE/PE conditional inside
+   `breakout_signal.py` itself.
+
+**Verified before trusting it**: full `tests/` suite run before and
+after this change (193 failed/182 passed both times, identical - every
+failure is pre-existing pinned-config-value staleness, confirmed by
+diffing against a `git stash`ed baseline run) - zero regressions. Also
+confirmed via direct import (`Options.option_main`, and the combined
+`main.app`) that `/breakout-signal`, `/chartink/webhook-sell`, and every
+other existing route still resolve correctly post-change.
+
+**To arm it once deployed**: set `OPTIONS_BREAKOUT_SIGNAL_ENABLED=true`
+in both the local and droplet `.env` (gitignored, scp separately per
+[[project-dhanboy-deployment]]), then restart - same checklist as any
+other live-affecting config change. Until then, the code ships inert:
+the scanner loop runs (harmless daily housekeeping only) but never
+scans or enters anything.
 
 ## Bot resource usage (checked same session, user request)
 

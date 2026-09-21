@@ -185,24 +185,67 @@ position's correct reconciliation and the absence of any exit-ladder
 error in the logs - kept functioning normally the entire time, WS feed
 dead or not.
 
-## Fix direction (not yet built - this incident is diagnosis only, per [[feedback-live-trading-safety]])
+## Fix (BUILT 21 Sep 2026, same day, user request - not yet deployed)
 
-Wrap `market_feed`'s own startup the same way `_run_order_update_forever`
-already wraps the order-update feed - own retry loop with backoff around
-the ENTIRE call to `MarketFeed.start()`/`run()`, not trusting the SDK's
-internal loop to survive its own first connection attempt. A minimal
-version: replace the direct `feed.start()` call in the `market_feed`
-property with a small wrapper thread that catches any exception escaping
-`run()` (not just relies on the SDK's own internal while-loop) and
-restarts `MarketFeed` itself after a backoff (ideally exponential, e.g.
-1s/2s/4s/8s capped at some ceiling - NOT the SDK's own fixed 1s, which is
-exactly what turned one rate-limit rejection into a hundreds-strong
-storm in the morning case). This is a real code change to
-`Options/dhan_client.py` (shared by Luxury/Futures/Swing's own copies too
-- check whether they're byte-identical copies the way `trading_engine.py`
-is, per [[backtest-methodology]]'s own note on that pattern) and should
-go through the normal test -> confirm -> deploy checklist before landing,
-not be rushed in reaction to this single incident.
+Built in `Options/dhan_client.py` (the one real implementation -
+Luxury/Futures/Swing's own `dhan_client.py` files just re-export the
+shared `dhan_wrapper` singleton via `from Options.dhan_client import ...
+dhan_wrapper`, confirmed by reading all four - only ONE fix site needed,
+unlike `trading_engine.py` which genuinely IS duplicated per package per
+[[backtest-methodology]]'s own note). Two parts, addressing both failure
+modes this incident actually showed:
+
+1. **`_run_market_feed_forever()`** - replaces the old `market_feed`
+   property's direct `feed.start()` call. Owns the ENTIRE blocking
+   `feed.run()` call (including its first connection attempt) in its own
+   infinite retry loop with exponential backoff
+   (`config.MARKET_FEED_BACKOFF_BASE_SECONDS`=2s, doubling to
+   `config.MARKET_FEED_BACKOFF_MAX_SECONDS`=60s, resetting to base after
+   `config.MARKET_FEED_BACKOFF_RESET_AFTER_SECONDS`=120s of stayed-up
+   time) - same "own the whole call" discipline `_run_order_update_forever`
+   already used, just with real backoff instead of a flat delay. Fixes
+   the "silently dead forever" mode directly: any exception escaping
+   `feed.run()` (including the very first `connect()` failing) is now
+   caught and retried, never left to kill the thread.
+2. **`_market_feed_watchdog_forever()`** - a SEPARATE thread polling
+   `self.stats["feed_errors"]` every `config.MARKET_FEED_WATCHDOG_
+   INTERVAL_SECONDS`=30s; if the error count climbed by
+   `config.MARKET_FEED_WATCHDOG_ERROR_THRESHOLD`=5+ in that window, calls
+   `feed.close_connection()` to force the SDK's own internal (backoff-
+   free) reconnect loop to terminate and hand control back to #1's outer
+   loop, which then applies a real backoff before the next attempt. This
+   is what fixes the OTHER "noisy but alive" mode - the SDK's own
+   internal while-loop (reached only after a first successful connect)
+   never returns control to `_run_market_feed_forever` on its own while
+   it's stuck reconnecting every ~1s, so #1 alone can't see or fix that
+   pattern; the watchdog intervenes from outside instead.
+
+A new authoritative `_market_feed_instruments: set[tuple]` on the wrapper
+(separate from any single `MarketFeed` instance's own `.instruments`) is
+what makes reconnection safe - every new `MarketFeed(...)` construction
+is seeded with the full current subscription set, so a position's
+already-subscribed contract doesn't silently stop getting ticks across a
+reconnect. `subscribe_option_price`/`unsubscribe_option_price` now update
+this set first, then push the change to whatever feed instance currently
+exists (tolerating `None` between reconnect attempts).
+
+**Verified before trusting it**: wrote a scratch functional test
+(monkeypatching `MarketFeed` with a fake that fails its first `run()`
+call exactly like the real incident, then gets stuck in a simulated
+error storm on its second attempt) - confirmed the outer loop retries
+after the dead first attempt, the watchdog force-closes the stuck second
+attempt, a third attempt then stays up cleanly, and the pre-existing
+subscribed-instrument set survives all of it. Also ran the full
+`tests/` suite before and after (193 failed/182 passed both times -
+every failure is pre-existing pinned-config-value staleness unrelated to
+this change, e.g. `test_risk_threshold_cutoff.py` still hardcoding the
+pre-21-Sep-raise MAX_LOSS values) - zero regressions introduced.
+
+**Not yet deployed** - built alongside [[options-pe-breakout-signal-
+gated-live-full-real-gates]]'s own live version for a single combined
+deploy, per the user's own instruction. Same droplet-restart-with-open-
+position discipline applies whenever it does ship - see
+[[project-dhanboy-deployment]].
 
 ## Recognizing this again
 
