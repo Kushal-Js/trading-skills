@@ -174,6 +174,49 @@ restart with no open-position impact; separately hit shared Dhan
 rate-limit contention with the live bot during market hours) - see
 [[local-backtest-dhan-session-collision]].
 
+**DEPLOYED LIVE (commit `fbd11f9`, restart 15:05 UTC / 20:35 IST)**:
+cross-package universe_bucket signal dispatcher with a capacity backlog,
+for Luxury + Futures only, per explicit user go-ahead given AFTER I laid
+out the risk explicitly (same-day-built code, zero prior live validation,
+requires a restart) and asked for separate confirmation - see
+[[universe-bucket-dispatcher-design]] for the full design and
+[[all-fno-universe-breakout-signal-15day-backtest]]/[[simply-bull-screener-5day-backtest]]
+for the backtests behind it.
+
+| Change | Strategy | Backtest evidence | Real PnL since |
+|---|---|---|---|
+| `universe_bucket.py` deployed - rolling 3-trading-day CE/PE bucket, fed by two new webhooks (`POST /universe-bucket/webhook` bullish, `/webhook-sell` bearish) matching Chartink's own payload shape | Shared (not per-package) | New module, no dedicated backtest of the bucket mechanics itself - see the two backtests above for the strategies that read from it | N/A - bucket is EMPTY until the user's own new Chartink screener is pointed at the webhook ("after I integrate it" - not yet done as of this entry). Live code, no real trading effect yet. |
+| `UNIVERSE_DISPATCHER_ENABLED=true` - dispatcher detects each universe_bucket signal ONCE (not once per package, closing the race the earlier independent-per-package-sync design had), offers it to Luxury then Futures round-robin+sequential-fallback, with a capacity backlog retrying a `duplicate_or_capacity_full`-only rejection once a slot frees, gated by a real momentum-reversal check (`reversal_filters.check_underlying_move_confirms_exit`, the same already-backtested 0.10% threshold) every retry | Luxury, Futures | [[dispatcher-capacity-backlog-comparison]] - 5-day Simply Bull backtest found ZERO measurable backlog effect (31 trades both with/without - capacity was never the actual binding constraint at that signal volume); 210-stock/14-day comparison queued to test the scale where capacity contention is real (890 `capacity_full` skips confirmed in the racing simulation) | Not yet - bucket empty, see above |
+| `BREAKOUT_USE_WS_CANDLES` - deliberately NOT enabled in this deploy | Options, Luxury, Futures | [[all-fno-universe-breakout-signal-15day-backtest]]'s own WS-candle parity check found close/volume reconstruction reliable but open-price accuracy unverified under a genuine live tick stream (the REST-replay test method can't validate that) | N/A - stays REST-only for now, scoped out deliberately |
+
+**Pre-existing, uncommitted, unrelated changes found in the working tree
+during this deploy** (NOT from this session, NOT included in the deploy):
+`Options/Luxury/Futures trading_engine.py`/`position_store.py` and a new
+`alert_bucket.py` implementing the loss-triggered bucket-switch feature
+(see [[alert-bucket-switch]]) reference `config.BUCKET_SWITCH_ENABLED`/
+`BUCKET_SWITCH_LOSS_RS`/`BUCKET_SWITCH_MIN_SCORE`, none of which are
+defined in any config.py - a real `AttributeError` waiting to fire on
+every position-monitoring tick once BUCKET_SWITCH is reached. Deliberately
+excluded from this deploy's commit (`main.py`'s `import alert_bucket` +
+router-mount lines were also removed from what got committed, for the
+same reason) - left untouched, uncommitted, in the local working tree for
+whoever finishes that work. Worth fixing (define the 3 missing config
+keys) before that feature is ever deployed on its own.
+
+**Post-deploy verification** (all done before/immediately after restart,
+no open positions on any package throughout): `/positions`,
+`/futures/positions`, `/luxury/positions`, `/swing/positions` confirmed
+empty pre-restart; `journalctl` confirmed clean startup - "UniverseDispatcher
+started for targets=['Luxury', 'Futures']", both CE/PE watchlists and both
+universe_bucket CE/PE buckets initialized with 0 symbols, zero tracebacks
+from any of the new modules (the only tracebacks in the startup window are
+the pre-existing, unrelated `swing_signals` "could not fetch Supertrend
+state" pattern, self-healing via cached values); `/health` and
+`/universe-bucket` (returning the correct rolling window
+`["2026-09-21","2026-09-18","2026-09-17"]`, weekend correctly skipped) both
+responding; droplet RAM 521Mi available post-restart, swap barely touched,
+`systemctl is-active` = active.
+
 ### 20 Sep 2026
 
 | Change | Strategy | Backtest evidence | Real PnL since |
