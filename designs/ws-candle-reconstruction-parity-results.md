@@ -70,17 +70,83 @@ unresolved, methodologically-ambiguous open-price gap on the exact metric
 the live signal logic is most sensitive to. `BREAKOUT_USE_WS_CANDLES`
 remains `false` for all three packages, unchanged from before this test.
 
-## What would actually resolve this
+## Follow-up (same day): re-ran with retry/pacing - rate-limit half resolved, open-price gap confirmed structural
 
-- Re-run the parity check with proper call pacing/backoff and a longer
-  gap between symbols, ideally well after any live-bot activity window,
-  to get all 4 (or more) symbol-days fetched cleanly without rate-limit
-  casualties.
-- The open-price question can only be truly settled by comparing the
-  live `underlying_candle_feed` module's own real WS-tick-derived bars
-  against REST candles for the SAME real trading session, once
-  subscribed - not a REST-vs-REST-proxy replay. This would need running
-  the feed live (still without `BREAKOUT_USE_WS_CANDLES` gating any real
-  entry) during a market session and diffing its `get_candles_dict()`
-  output against real REST candles fetched after the fact for the same
-  symbols/day.
+`backtest_ws_candle_reconstruction_parity.py` had two real gaps causing
+the rate-limit casualties above: no pacing between calls, and
+`fetch_real_5m_candles`/`fetch_real_1m_candles` silently swallowed a
+`{"status": "failure", ...}` rate-limit response into an empty dict
+instead of raising - so a rate-limited call looked identical to "no data
+for this symbol" with no retry ever attempted. Fixed with the same
+discipline already established in [[local-backtest-dhan-session-collision]]'s
+own fix (`_fetch_with_retry`: raises on non-success status, 5 retries,
+5-25s exponential backoff, 1.2s pacing between every call).
+
+Re-ran against 8 symbols (RELIANCE, TCS, MAHABANK, IDEA, HDFCBANK,
+ICICIBANK, SBIN, ITC), same day (`2026-09-18`):
+
+| Metric | Result |
+|---|---|
+| Symbols with real data fetched | **8/8** (0 rate-limit casualties, vs 2/4 lost on each of the first two runs) |
+| Close match (<0.05%) | **568/568 (100%)** - every bar, every symbol |
+| Volume match (<1%) | **568/568 (100%)** - every bar, every symbol |
+| Open+close exact match | 145/568 (25.5%) - low, but *consistently* low across all 8 symbols (range 4/71 to 56/71) |
+
+**This is now much stronger evidence than the first two runs.** Zero
+close or volume deviation across 568 independent bar comparisons rules
+out a real aggregation bug in `_update_bar` with high confidence - if
+the bucketing math itself were wrong, it would not produce a perfect
+close/volume match while only ever missing on open. The open-price gap
+being present, in the same direction, on every single symbol (not random
+scatter) confirms it's the TEST METHODOLOGY's own systematic artifact
+(1-min-close-as-tick-proxy always samples ~1 minute into each window,
+never catching the window's true first trade) rather than a symbol-
+specific data problem or a bug in the module being tested.
+
+**Still not enabled live** - this backtest can raise confidence in the
+aggregation logic, but it structurally cannot answer the open-price
+question, no matter how many symbols or days are added, because the
+proxy method itself is what's biased. Settling that requires a real live
+WS tick stream, not another REST replay - see below.
+
+## Live-tick observation capability (added same day, for the NEXT market session)
+
+Since markets were closed by the time this was worth pursuing further
+today, added a genuinely passive, decoupled observation path so the
+open-price question can be settled with a REAL WS tick stream next
+session, without needing `BREAKOUT_USE_WS_CANDLES` (which would also
+start using it for real signal decisions) turned on:
+
+- `POST /debug/underlying-feed/subscribe` (body: `{"symbols": [...]}`) -
+  calls `underlying_candle_feed.subscribe()` directly, independent of any
+  package's `BREAKOUT_USE_WS_CANDLES` flag. Purely additive: subscribes
+  the listed symbols on the live bot's own already-authenticated market-
+  data WebSocket in Quote mode, same connection Options/Luxury/Futures
+  already share for option LTP - no new session, no collision risk.
+- `GET /debug/underlying-feed/snapshot` - read-only, returns
+  `underlying_candle_feed.snapshot()` (subscribed symbols, bar counts,
+  last-tick age) for observability.
+- `GET /debug/underlying-feed/candles/{symbol}` - read-only, returns
+  `get_candles_dict(symbol)`'s own completed bars for direct comparison
+  against a REST pull for the same symbol/day after market close.
+
+Neither of these two GET endpoints nor the subscribe endpoint touches
+`BREAKOUT_USE_WS_CANDLES`, `BREAKOUT_SEED_UNIVERSE_ENABLED`, or any real
+entry-gating code path - subscribing a symbol here has zero effect on
+what Options/Luxury/Futures actually trade. Deployed (`c97bd50`),
+restart-verified (all 4 packages' positions flat before/after), and
+functionally verified live: `POST /debug/underlying-feed/subscribe`
+with `{"symbols": ["RELIANCE", "TCS"]}` returned `{"subscribed": [...]}`
+cleanly; `GET .../candles/RELIANCE` correctly returns `{}` right now
+(market closed, no ticks flowing yet) rather than erroring - confirms
+the plumbing works end to end, just waiting on real market data.
+
+**Next step (needs live market hours - not done yet)**: subscribe a
+handful of symbols via the new endpoint right after the next market
+open, let real ticks accumulate through the session, then pull
+`get_candles_dict()` for each and diff against real REST 5-min candles
+fetched after close for the same symbols/day - the comparison this
+whole investigation has been building toward. Until that runs, the
+open-price question remains open (aggregation logic itself is now
+well-supported by the 100% close/volume match above; the open field
+specifically is unproven either way).
