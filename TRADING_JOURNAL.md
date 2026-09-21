@@ -174,6 +174,18 @@ restart with no open-position impact; separately hit shared Dhan
 rate-limit contention with the live bot during market hours) - see
 [[local-backtest-dhan-session-collision]].
 
+**Simply Bull screener, 5-day backtest (CE-only, racing logic - pre-
+dispatcher)**: user's own real Chartink screener export
+(`~/Desktop/future/01 Simply Bull.csv`) used as the per-day curated
+universe instead of the full 210-stock scan. Full detail:
+[[simply-bull-screener-5day-backtest]]. Last 5 distinct CSV dates
+(2026-09-11, 09-16, 09-17, 09-18, 09-21 - 09-15 has zero rows, confirmed
+not a gap, the screener genuinely found nothing that day), Luxury+Futures
+only. Result: **35 sim trades, 82.9% win rate, +Rs47,257.35**, vs real
+(Luxury+Futures, same window) 121 trades, 34.7% win rate, -Rs31,157.40.
+Same "compares new filter vs. old entry logic, not apples-to-apples"
+caveat as the 210-stock backtest above.
+
 **DEPLOYED LIVE (commit `fbd11f9`, restart 15:05 UTC / 20:35 IST)**:
 cross-package universe_bucket signal dispatcher with a capacity backlog,
 for Luxury + Futures only, per explicit user go-ahead given AFTER I laid
@@ -216,6 +228,20 @@ state" pattern, self-healing via cached values); `/health` and
 `["2026-09-21","2026-09-18","2026-09-17"]`, weekend correctly skipped) both
 responding; droplet RAM 521Mi available post-restart, swap barely touched,
 `systemctl is-active` = active.
+
+**Simply Bear screener, 5-day backtest (PE-only, first run using the
+LIVE dispatcher+backlog logic)**: PE counterpart to the Simply Bull
+backtest above, but run AFTER the dispatcher deploy, using the actual
+deployed dispatch mechanism rather than a reconstruction of the older
+racing logic. Full detail: [[simply-bear-screener-5day-backtest]]. Last 5
+distinct CSV dates (2026-09-15, 09-16, 09-17, 09-18, 09-21 - a genuinely
+consecutive run this time, unlike Simply Bull's own gap-at-09-15),
+dropped NIFTY/BANKNIFTY (indices, not F&O stocks, included as plain rows
+in this CSV). Result: **34 sim trades, 82.4% win rate, +Rs50,159.14**, vs
+real (Luxury+Futures, same window) 120 trades, 36.7% win rate,
+-Rs20,968.65. Zero same-instant duplicate captures this run (unlike
+Simply Bull's 3) - the round-robin dispatch cleanly split load with no
+collisions in this dataset.
 
 **Bucket ARMED with real candidates, 21:19 IST** - user's own two Chartink
 screener exports (`~/Desktop/future/01 Simply Bull.csv` -> CE,
