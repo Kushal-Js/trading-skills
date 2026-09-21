@@ -217,13 +217,34 @@ line of work so far.
 - Every other real production gate/exit is unchanged and validated
   elsewhere in this repo - this sweep isolates the DETECTION thresholds
   specifically, nothing else was varied.
-- Nothing has been changed in the live `.env`/config as a result of this
-  sweep - this is evaluation only.
+
+## Deployed (21 Sep 2026)
+
+User reviewed this table and asked to adopt the #1 combo -
+`clearance=0.3, body=0.5, relvol=1.2` (the loosest of the 27, 59
+trades / 93.2% win rate / +Rs175,346.60). Deployed as env overrides
+(code defaults of 0.5/1.0/1.5 are left untouched, per this repo's
+existing convention of changing `.env` rather than code when only the
+live-deployed *value* is changing):
+
+```
+LUXURY_BREAKOUT_CLEARANCE_PCT=0.3
+LUXURY_BREAKOUT_MIN_BODY_PCT=0.5
+LUXURY_BREAKOUT_MIN_RELATIVE_VOLUME=1.2
+```
+
+Applied to local `.env`, scp'd to the droplet's `.env`, and the Luxury
+service restarted to pick it up (positions checked empty before/after,
+per the standing restart-safety checklist). Given the caveat above
+about a looser body threshold trending closer to noise, this is worth
+re-running the same sweep methodology against fresh alert history in
+a few weeks to confirm the ranking holds outside this original 14-day
+window.
 
 ## What's still open
 
-Purely a backtest exercise per the user's own framing ("evaluate...",
-"collect info...", "show me a report") - no config change was requested
-or made. Adopting the best (or any other) combination is the user's own
-call, per [[feedback-live-trading-safety]] - the same standing practice
-every other finding in this line of work has been held to.
+Re-validate this ranking against a later, non-overlapping stretch of
+Luxury alert history once enough new alerts accumulate, since the
+caveats above (single 14-day window, looser body threshold trending
+closer to noise) were never fully resolved - just accepted as the
+tradeoff for adopting the best combo found so far.
