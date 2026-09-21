@@ -257,6 +257,51 @@ but have no directly-attributable real before/after PnL here.
 | 21 Sep | [[market-feed-thread-death-on-429]] | Dhan SDK bug (vendored `dhanhq` MarketFeed thread dies silently on a 429), not this repo's own code. No trading-correctness impact - REST fallback covered every exit check throughout. Fix not yet built. |
 | 21 Sep | Swing MCX PnL logging bug (this journal, no separate incident file) | `record_closed_trade()` understated every Swing MCX trade's logged PnL by orders of magnitude (used lot-count `quantity` instead of `pnl_multiplier`). No trading-decision impact - only the historical log was wrong, live exit decisions always used the correct multiplier. Fixed (`ca7a173`), pulled to droplet, restart deliberately deferred by user. |
 
+## Live monitoring sessions
+
+Ad-hoc real-time monitoring windows (user request), checking `/health`,
+all 4 packages' positions, new ERROR/CRITICAL log lines, and alert/trade
+counts at a fixed interval - read-only, never restarts anything itself.
+Logged here so a "how noisy is market open, really" baseline builds up
+over time, separate from the dated `incidents/` writeups (which are for
+specific notable failures, not routine confirmation that everything's
+fine).
+
+### 21 Sep 2026, 09:15-09:45 IST (market open, 30 min, 90s interval)
+
+**Result: no crash, bot healthy throughout.** 20/20 health checks
+returned 200; `/positions` never went unresponsive on any of the 4
+packages.
+
+- **Alerts**: 58 webhook alerts logged in the first ~25 minutes (all
+  arrived by 09:38 IST, none after - normal, not a stall).
+- **Trades**: 17 real trades closed by the end of the window - Luxury 7
+  (2 wins, -Rs7,817.50), Options 3 (0 wins, -Rs6,315.00), Futures 5
+  (2 wins, +Rs348.00), Swing 2 (0 wins, -Rs7,475.00 - MCX-corrected).
+  Net: **-Rs21,259.50** for the session so far. End-of-window open
+  positions: Luxury 2 (GODREJPROP, BLUESTARCO), Options/Futures/Swing
+  flat.
+- **Errors observed** (none fatal, all self-recovered):
+  - **137x** `Exception at calling ltp/OHLC as {'status': 'failure', ...}`
+    concentrated in a burst around 09:22-09:27 IST - Dhan REST
+    congestion right at market open (a very common pattern, see
+    [[dhan-rate-limit-every-call-site]]). The bot's own retry logic
+    (`_get_option_ltp_once failed (attempt 1/3)... retrying in 1.5s`)
+    and documented fallback (`live LTP unavailable - using last
+    historical close ... instead of going blind`) both fired correctly -
+    no trade decision was made blind, and `/feed-stats` confirmed the
+    WebSocket feed itself was alive and receiving ticks throughout
+    (`price_ticks_received: 2734`, `feed_errors: 0` as of this check) -
+    the earlier same-morning [[market-feed-thread-death-on-429]]
+    incident had already resolved by this window.
+  - **17x** `swing_signals` "could not fetch Supertrend/regime state -
+    keeping last cached value" for COPPER/ASHOKLEY/ANGELONE/ADANIPORTS/
+    NATURALGAS - the same pre-existing, already-known
+    `fetch_continuous_intraday returned no data` pattern seen earlier
+    this session, not a new issue.
+- **Nothing required a fix.** No restart, no code change, no manual
+  intervention during this window.
+
 ## Open questions worth resolving (found while compiling this journal)
 
 - **`LOSS_REPEAT_BLOCK_COUNT`**: the 11 Sep `.env` narrative describes
