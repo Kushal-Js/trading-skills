@@ -10,6 +10,12 @@ re-deriving everything from scratch each time.
 
 ## What goes here
 
+- **`TRADING_JOURNAL.md`** — a living, chronological record of every
+  strategy/risk-config change deployed to the live bot, tied to the real
+  PnL trajectory before and after it, plus the issues that came up along
+  the way. Update it whenever a strategy-level change goes live (see its
+  own "How to maintain this" section) - this is the file to open first
+  when deciding whether to tune something that's already been tried.
 - **`learnings/`** — durable findings about *how things actually behave*:
   exit mechanics, screener logic, backtest methodology and its limits,
   capacity/ranking effects, config-tuning history. Each file should be
