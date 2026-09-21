@@ -1,12 +1,15 @@
 # Options PE + breakout-signal gate, full real-gate replication (21 Sep 2026, user request)
 
-Status: **BUILT, not yet deployed** (21 Sep 2026, same day as the
-backtest below) - the live version was built as a feature-flagged,
-PE-only wiring of the unchanged `breakout_signal.py` module into
-Options, alongside the [[2026-09-21-market-feed-thread-death-on-429]]
-backoff fix, for a single combined deploy per the user's own
-instruction. See "Live build" section near the bottom for exactly what
-was wired and how to arm it.
+Status: **DEPLOYED AND LIVE** (21 Sep 2026, same day as the backtest
+below). Built first as a feature-flagged, PE-only wiring (off by
+default), then the SAME DAY widened to CE+PE and promoted to Options'
+SOLE real entry path on explicit user direction (see
+[[2026-09-21-breakout-signal-sole-entry-path-deploy]] for that decision,
+the deploy itself - including a broken first attempt and its fix - and
+the final verified live state). `OPTIONS_BREAKOUT_SIGNAL_ENABLED` now
+defaults `true`. See "Live build" section near the bottom for the
+original PE-only wiring details, most of which carried over unchanged
+into the CE+PE/sole-entry-path version.
 
 Follow-up to the user flagging that Options' real PE PnL over the
 recent window looked weak. Same treatment already given to

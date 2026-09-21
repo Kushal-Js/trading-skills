@@ -241,11 +241,15 @@ every failure is pre-existing pinned-config-value staleness unrelated to
 this change, e.g. `test_risk_threshold_cutoff.py` still hardcoding the
 pre-21-Sep-raise MAX_LOSS values) - zero regressions introduced.
 
-**Not yet deployed** - built alongside [[options-pe-breakout-signal-
-gated-live-full-real-gates]]'s own live version for a single combined
-deploy, per the user's own instruction. Same droplet-restart-with-open-
-position discipline applies whenever it does ship - see
-[[project-dhanboy-deployment]].
+**DEPLOYED AND LIVE** (21 Sep 2026, same day) - shipped in the same
+combined deploy as [[options-pe-breakout-signal-gated-live-full-real-
+gates]]'s CE+PE/sole-entry-path version, per the user's own instruction.
+See [[2026-09-21-breakout-signal-sole-entry-path-deploy]] for the deploy
+itself (including a broken first attempt over an unrelated dependency
+issue, and its fix) and the final verified live confirmation: `/feed-
+stats` showed `feed_connects: 1, feed_errors: 0` on the actual restart
+that shipped this, with the startup log confirming `Dhan market-data
+WebSocket supervisor + watchdog starting in the background`.
 
 ## Recognizing this again
 
