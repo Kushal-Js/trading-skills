@@ -268,3 +268,38 @@ interact badly with the FIX itself (unlikely, since the fix specifically
 targets surviving restarts) - that full-day sample is what should
 actually settle the open-price question, not another partial morning
 snapshot.
+
+## Open-price question: ROOT-CAUSED same day (22 Sep), fix deployed - live re-validation still pending
+
+See [[2026-09-22-ws-candle-open-price-root-cause-ltt]] for the full
+writeup. Short version: ticks were bucketed into 5-min windows by LOCAL
+RECEIPT TIME (`datetime.now(IST)` at the moment our process handled the
+packet), never by `LTT` (Last Trade Time - the exchange's own timestamp,
+already parsed by the SDK but never read anywhere in this codebase). A
+trade processed just after a 5-min boundary due to ordinary network/
+processing latency got misbucketed into the NEXT bar, corrupting that
+bar's open specifically (set by the first attributed tick) while close/
+volume (built from many ticks) mostly self-corrected - exactly the
+asymmetric pattern documented throughout this file.
+
+Verified LTT's timezone empirically before trusting it (guessing wrong
+would have swapped one bucketing bug for a worse one): real post-close
+ticks showed LTT ~10 minutes behind local receipt time, not ~5.5 hours
+behind - confirms the SDK's `utc_time()` output is already correct IST
+wall-clock time-of-day despite its name, no further conversion needed.
+
+Fixed (`a6e026e`): `_tick_time_from_ltt` parses LTT, falls back to
+receipt time if missing/malformed, wired into the quote-tick path only
+(doesn't touch `_ltp_cache_ts`'s own, different "how fresh is our
+knowledge of the price" use of receipt time). 5 new tests, all passing
+both locally and re-run directly on the droplet's deployed code.
+Deployed with 0 open positions across all 4 packages before/after.
+
+**Still open**: the market went fully quiet (13+ minutes, zero new
+ticks) before a fresh bar could complete post-fix, so there's no live
+post-fix parity comparison yet - only code-level reasoning, the LTT-
+timezone empirical check, and unit tests support the fix so far. The
+actual accuracy improvement (does TCS/ICICIBANK's exact-match rate
+genuinely go up) needs checking at the next market open via
+`/debug/underlying-feed/parity/{symbol}`, same method used all day.
+`BREAKOUT_USE_WS_CANDLES` stays off until that confirms it.
