@@ -111,7 +111,51 @@ This fixes the amplification, not necessarily every possible trigger -
 `fetch_continuous_intraday` can still occasionally return empty data from
 a genuine transient Dhan-side issue (that's the whole reason `_retry`
 exists). That's expected and now correctly bounded to the intended
-refresh cadence instead of an unbounded storm. Worth watching this
-morning (22 Sep market open) for whether the same 5 Swing symbols show
-any `could not fetch` lines at all, and if so, confirming they're spaced
-~60s/~15s apart rather than every 5s.
+refresh cadence instead of an unbounded storm.
+
+**Update, same morning, ~08:56-09:00 IST (pre-open)**: watched the fix live
+post-deploy - throttle spacing was confirmed clean (~60-65s apart, not
+every 5s), but 3 of Swing's 6 watchlist symbols (COPPER, COALINDIA,
+NATURALGAS) were still failing their regime-state fetch on literally
+every attempt, continuously, for 50+ minutes straight. Added one
+diagnostic-only log line to `fetch_continuous_intraday`
+(`Options/dhan_client.py`, commit `38de294`) to capture Dhan's actual raw
+response instead of just "empty" - deployed immediately (restart
+03:29:42 UTC, 0 positions before/after, auth clean, `/health` OK). First
+log line on the very next tick answered it definitively:
+
+```
+DH-904 Rate_Limit: "Too many requests on server from single user
+breaching rate limits. Try throttling API calls."
+```
+
+**Root cause, confirmed**: a genuine account-wide Dhan REST rate limit,
+not anything specific to these 3 symbols individually - `DH-904` is
+per-account, not per-instrument. With Options/Luxury/Futures' breakout
+scanners (up to 10 symbols/cycle each), the UniverseDispatcher, the
+universe_bucket sync (19 CE symbols), and Swing's own regime/Supertrend
+polling for 6 symbols all sharing the same account-wide call budget, the
+aggregate REST volume across all 4 packages is now tight enough that
+Swing's fetches are sometimes the ones that get throttled out - COPPER/
+COALINDIA/NATURALGAS just happened to be whichever calls landed in the
+"too many requests" window each cycle, not a property of those symbols.
+My earlier MCX-contract-age hypothesis was wrong - glad this got settled
+by evidence instead of shipped as a guess.
+
+**Action taken same morning**: per user request, reduced Swing's
+watchlist from 6 symbols to 2 (COPPER, NATURALGAS only - dropped
+ADANIPORTS, ANGELONE, COALINDIA, ASHOKLEY) via `POST /swing/watchlist/
+replace`, effective immediately (no restart needed - the watchlist file
+is re-read every monitor tick). This directly cuts Swing's own
+contribution to the shared REST budget by two-thirds as an immediate,
+zero-risk mitigation ahead of market open, buying time to look at the
+budget question properly.
+
+**Still open, deliberately deferred to after market close (22 Sep)**:
+whether/how to reduce the account-wide call volume more structurally -
+options include pacing Swing's regime/Supertrend fetches further apart,
+reducing `INTRADAY_CONTINUOUS_LOOKBACK_DAYS`/`REGIME_EMA_LOOKBACK_DAYS`
+call frequency, or reviewing whether the dispatcher/universe_bucket
+scan cadence (10 symbols/60s) is itself worth trimming. Not touched
+today - no code/config change to the shared budget itself, just the
+watchlist-size mitigation above.
