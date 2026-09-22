@@ -150,3 +150,70 @@ whole investigation has been building toward. Until that runs, the
 open-price question remains open (aggregation logic itself is now
 well-supported by the 100% close/volume match above; the open field
 specifically is unproven either way).
+
+## Live parity results, 22 Sep 2026 - real answer at last, and it's not clean yet
+
+The automated `ws-candle-parity.timer` ran its first REAL cross-session
+comparison overnight/this morning (21->22 Sep) - 21 Sep's own report
+(`history/2026-09-21_ws_candle_parity_report.json`) showed `recon_bar_
+count: 0` for every one of the 8 test symbols against `real_bar_count:
+72` - the WS reconstruction produced literally nothing that day. Not
+promising on its face, but see below - this was superseded by fixes
+already in flight the same evening (`2632cf1` day-rollover fix,
+`f234c0c` wiring the dispatcher's own WS-subscribe call).
+
+**Today's live state (checked directly via `/debug/underlying-feed/
+parity/{symbol}`, not waiting for the scheduled 15:40 IST report)**:
+reconstruction IS producing bars today (12 bars per symbol by 11:13 IST,
+fresh ticks flowing). Pulling the real parity comparison for all 8 test
+symbols:
+
+- **Close price: genuinely good.** 10-12 of 12 matched bars within
+  0.05% on every symbol, max deviation 0.095%. This part of the
+  reconstruction is solid.
+- **Volume: badly broken, but now root-caused and fixed.** Every single
+  symbol showed a massive overshoot on its FIRST reconstructed bar only
+  - RELIANCE real=44,064 vs recon=1,427,692 (32x), MAHABANK real=34,784
+  vs recon=2,140,397 (61x), similarly 25-60x across all 8. Root cause:
+  `underlying_candle_feed._update_bar` hardcoded the volume baseline to
+  0.0 on a symbol's first tick, an assumption only valid if the
+  subscription starts exactly at market open. The parity check
+  subscribes at 10:00 IST (not 09:15), so the first bar's "volume"
+  became the ENTIRE day's cumulative volume up to that point, not that
+  bar's own volume - and since the dispatcher subscribes a symbol
+  whenever it first enters its pool (any time in the session, not just
+  09:15), this would hit real production usage too, not just the parity
+  check's own timing. **Fixed same day** (`9a7fe68`): seed the baseline
+  from the first tick's own `cum_volume` instead of 0.0. Not catchable
+  by this doc's own REST-replay backtest (`backtest_ws_candle_
+  reconstruction_parity.py`), which always starts from the beginning of
+  a symbol's day, so `cum_volume` is naturally ~0 at the first synthetic
+  tick either way - the exact condition under which the old bug's
+  assumption happened to be correct. Added `tests/test_underlying_
+  candle_feed.py` specifically to cover the mid-day-subscribe case the
+  replay method structurally cannot.
+- **Open price: still the open question, now with real numbers.**
+  `open_and_close_exact_matches` ranged from 3/12 (TCS, HDFCBANK) to
+  11/12 (MAHABANK) across the 8 symbols - i.e. for some symbols the
+  reconstructed open was wrong on up to 75% of bars. This is the exact
+  gap this whole doc has been chasing (see "Next step" above, written
+  before today's live data existed) - now empirically confirmed as
+  real and non-trivial, not just theoretically unproven.
+
+**Why this matters beyond just "is the WS feed accurate"**: the same-day
+breakout-scanner parameter sweep ([[breakout-scanner-param-sweep-22sep-
+intraday]]) found `BREAKOUT_MIN_BODY_PCT` (computed from a candle's own
+`open`) is the single most sensitive gate in the whole scanner, and
+`BREAKOUT_MIN_RELATIVE_VOLUME` (computed from `volume`) is the only
+other gate with any measurable effect. Turning on `BREAKOUT_USE_WS_
+CANDLES` before both of these are solid would feed corrupted data into
+exactly the two parts of the algorithm that actually matter, not a
+minor accuracy footnote.
+
+**Decision: `BREAKOUT_USE_WS_CANDLES` stays off.** The volume bug is
+fixed, but unverified until the next live dry-run confirms it (today's
+fix landed mid-session, after the parity data above was already
+collected - the NEXT parity report, or a fresh manual check, should show
+the first-bar overshoots gone). The open-price gap is untouched by
+today's fix and remains the harder, still-unsolved half of this
+investigation.
