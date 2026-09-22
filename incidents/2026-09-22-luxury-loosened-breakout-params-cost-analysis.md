@@ -79,22 +79,48 @@ sanity check passed, methodology trustworthy.
 | SONACOMS | YES rv=5.53 | NO | -980.00 |
 | PATANJALI | YES @09:30 | YES, but @09:40 (different candle, rv=3.05) | -1,612.50 |
 
-**6 of 8 symbols only produced a signal because of today's loosened
-gate** - under the original thresholds, no signal exists for CGPOWER,
-DRREDDY, SWIGGY, JUBLFOOD, PGEL, or SONACOMS on any candle today. Summing
-those loosening-only trades: **-7,940.00**, i.e. essentially the entire
-day's real Luxury loss (-7,777.50) is attributable to signals that could
-not have existed under the original gate.
+**UPDATE (same day, later pass): PATANJALI reclassified to loosening-only
+after checking its actual real entry candle directly.** The table above
+used `find_first_signal_that_day` - "first candle satisfying thresholds,
+scanning the whole day" - which for PATANJALI found a signal at 09:30/
+09:40 under loosened/original respectively. But PATANJALI's REAL live
+entry didn't happen until 13:32 IST, four hours later, even though it was
+already in Luxury's own restored watchlist all day. That gap means the
+full-day scan's early "signal" doesn't reflect what the live system
+actually detected at that time (reason not fully root-caused - possibly a
+live-vs-replay candle-window difference, not a watchlist-membership
+issue since PATANJALI genuinely was already in rotation) - so it's not
+trustworthy evidence of what the live bot would have done.
 
-GVT&D is the one clean apples-to-apples match - identical signal, same
-candle, under both threshold sets - and it's also the day's one clear
-win. PATANJALI is not a clean match: original params catch *a* signal on
-the same symbol/direction, but on a later candle (09:40 vs 09:30) with a
-different measured relative-volume (3.05 vs 0.92) - so its real -1,612.50
-doesn't strictly transfer to what an original-params entry would actually
-have produced (different entry price/timing). Counted as "would have
-fired anyway" for the totals above, but flagged as an approximation, not
-a matched trade.
+Checked directly instead: pulled the exact real entry candle (13:25 IST
+start, confirmed via an exact match to the live log's own range_pct=0.65,
+body_pct=1.1, relative_volume=5.93) and re-evaluated it standalone against
+both threshold sets. Loosened: signal (matches live exactly). **Original:
+no signal** - clearance and/or avg-daily-volume fails at that specific
+candle. So PATANJALI's real entry also would not have happened under
+original params.
+
+**Corrected finding: only GVT&D would have entered under original
+params today - nothing else.** Same candle (09:15), identical signal
+under both threshold sets, same real outcome: +1,775.00. Every other real
+Luxury trade today (CGPOWER, DRREDDY, SWIGGY x2, JUBLFOOD, PGEL,
+SONACOMS, PATANJALI) only exists because of the loosened gate. **Original
+params would have produced a clean +1,775.00 today, vs. the real
+-7,777.50.**
+
+**Methodology note for future backtests using this pattern**: `find_
+first_signal_that_day`'s "scan the whole day, return the first pass" is
+NOT a faithful stand-in for "would the live system have entered here" -
+it can find an earlier hypothetical signal the live system never acted on
+for reasons the full-day scan doesn't model (live-vs-replay data-window
+differences at minimum; possibly others). When a symbol's real entry time
+doesn't line up with the full-day scan's own found time, check the real
+entry's exact candle directly (as done above) rather than trusting the
+full-day scan's answer for that symbol. This caveat does NOT weaken the
+"no signal on ANY candle all day" negative results (CGPOWER, DRREDDY,
+etc.) - an exhaustive full-day miss already covers the real candle too,
+by construction; the failure mode only applies to full-day-scan HITS that
+don't line up with the real timeline.
 
 **Mechanistic read**: the loosened gate isn't just admitting more trades -
 it's specifically admitting signals with materially weaker relative-volume
@@ -102,6 +128,18 @@ confirmation (0.96x, 1.83x, 2.62x - all below the original 1.5x floor,
 several barely above the loosened 0.8x floor). Those are exactly the ones
 that lost. The one signal strong enough to also clear the *original*,
 stricter bar (GVT&D, rv=9.65) was the one that won.
+
+## Rollback deployed (same day)
+
+Given the finding, user chose to roll back **Luxury only** (Options and
+Futures stayed on loosened params - both were having a fine day, 1W/0L
+and 2W/1L respectively, and weren't implicated in this analysis).
+`LUXURY_BREAKOUT_CLEARANCE_PCT/MIN_BODY_PCT/MIN_RELATIVE_VOLUME/MIN_AVG_
+DAILY_VOLUME` reverted to 0.5/1.0/1.5/500000 in `.env`, dry-run import
+check passed, service restarted mid-day with one real open Luxury
+position (DLF CE, entry 14.65) - reconciled cleanly from the broker on
+startup (`reconciled: true`, same entry/target/stop), consistent with
+every prior same-day restart's reconciliation behavior.
 
 ## Not done this session (disclosed)
 
