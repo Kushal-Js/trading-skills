@@ -154,3 +154,34 @@ every prior same-day restart's reconciliation behavior.
   have differed under a partially-loosened set (e.g. only relaxing
   avg-daily-volume, keeping clearance/relvol at original) - out of scope
   for what was asked.
+
+## Final day-end tally (market closed, full data)
+
+One more real Luxury trade came in after the rollback restart was already
+in flight: **DLF (CE)**, entered 14:17 IST via the dispatcher (just before
+the restart took effect), closed STOP_LOSS_HIT for -2,280.00. Checked the
+same way as the rest - real entry candle (14:10 IST, range 0.15%, body
+0.5%, relvol 2.62x, exact match to the live log) does not clear original
+thresholds. Joins the loosening-only list, bringing it to 9 of 10 real
+Luxury trades today.
+
+**Full-day comparison, 3 breakout-gated strategies (Options+Luxury+
+Futures), market closed:**
+
+| | Real | Backtested under today's final deployed config (Luxury=original, Options/Futures=loosened, unchanged) |
+|---|---:|---:|
+| Options | +1,560.00 | +1,560.00 (unaffected) |
+| Futures | +241.50 | +241.50 (unaffected) |
+| Luxury | -10,057.50 (10 trades) | +1,775.00 (1 trade - GVT&D only) |
+| **Total** | **-8,256.00** | **+3,576.50** |
+
+**Swing win/loss for GVT&D-sole-survivor answer restated for clarity**:
+only GVT&D, among all 10 real Luxury entries today, would have fired
+under original params. The other 9 (CGPOWER, DRREDDY, SWIGGY x2,
+JUBLFOOD, PGEL, SONACOMS, PATANJALI, DLF) exist only because of the
+loosened gate.
+
+Swing (separate, non-gated strategy, unaffected by this whole
+investigation) had its own real day: NATURALGAS + COPPER round-trips
+netting -2,900.00 - noted for full-account context, not part of this
+comparison.
