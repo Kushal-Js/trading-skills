@@ -49,7 +49,9 @@ runtime via `from Luxury import config`, not hardcoded)
    `LOSS_REENTRY_TREND_CHECK_ENABLED`'s real ADX(>=20)/ER(>=0.3) check
    (via `reversal_filters._compute_adx`/`_efficiency_ratio_at`, real
    historical 5-min data) genuinely gates the 1-prior-loss case here,
-   unlike Options' own COUNT=1 (where that path is dead code).
+   unlike Options' own COUNT=1 (where that path is dead code). See
+   [[reversal-trend-strength-filter-arc]] for where these two thresholds
+   actually came from - a 5-round backtest arc the following day.
 3. **Cross-strategy / broker-wide open-position check**, approximated as
    an interval overlap against Options/Futures/Swing's own REAL trading
    (unaffected by this hypothesis) plus this simulation's own currently-

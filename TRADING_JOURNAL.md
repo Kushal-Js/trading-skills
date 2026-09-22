@@ -352,6 +352,15 @@ than a single strategy pivot.
 |---|---|---|---|
 | Opening-burst extra CE capacity slot (+1 slot, 09:15-10:00) | Options/Futures/Luxury | [[opening-burst-slot-and-sl-target-sensitivity]] | Reflected in the 17/18 Sep rows above (still net negative for Options/Futures those days) |
 | Global liquid-contract-resolution gate (`get_liquid_atm_option`) | All 4 (Options/Futures/Luxury/Swing) | [[liquid-contract-resolution]] - built after the ATHERENERG broker-stop-rejection incident | Reflected in every row from 17 Sep onward |
+| Kaufman Efficiency Ratio added as a shadow-mode-only logging field (never blocks, threshold 0.3); Futures ported Options' live volume-floor gate (1.2 ratio); Swing got ADX/RSI/volume-ratio/ER shadow logging on every real entry | Options/Futures/Luxury (ER logging), Futures (volume floor), Swing (shadow logging only) | [[reversal-trend-strength-filter-arc]] - rounds 3/4 of the same arc (`b43a873`, `416b3ff`); ER's standalone evidence (+Rs10,925.75/143 trades, +Rs5,561.25 incremental over the live volume floor) judged "thin and lumpy" (85% from one day), so kept shadow-only | Reflected in every row from 17 Sep onward (volume floor); ER logging is diagnostic only, no real-trade effect |
+| `LOSS_REENTRY_TREND_CHECK_ENABLED`: live ADX(>=20)/ER(>=0.3) re-entry gate (either one passing is enough) for Options/Futures/Luxury, gating a re-entry on a symbol that already lost money today | Options/Futures/Luxury | [[reversal-trend-strength-filter-arc]] (round 1-4 findings, `d758e6b`) - real incident: ATHERENERG 29 SEP 1540 PUT (17 Sep) whipsawed out via SUPERTREND_EXIT with a logged ADX of 13.24 (well below the 20 threshold), then a same-day re-entry lost again; see also the 18 Sep bundle row below for this same commit's loss-repeat-block broadening | Reflected in every row from 18 Sep onward (also see 18 Sep bundle below) |
+
+### 16 Sep 2026
+
+| Change | Strategy | Backtest evidence | Real PnL since |
+|---|---|---|---|
+| Shadow-mode-only logging of ADX/RSI/volume-ratio/RSI-extreme-plus-volume-spike "climax combo"/post-SUPERTREND_EXIT cooldown for every real entry (`reversal_filters.py`, never blocks) | Options/Futures/Luxury | [[reversal-trend-strength-filter-arc]] - rounds 1+2 of a 5-round arc triggered by that morning's PAYTM (22s, -Rs4,603.75) and YESBANK (61s, -Rs4,043.00) near-instant reversals (`5291efa`) | Diagnostic only, no real-trade effect |
+| Volume floor promoted from shadow-mode to a **live blocking gate** (entry-candle volume < 1.2x its 20-bar average blocks the entry), Options + Swing/MCX only | Options, Swing (MCX symbols only) | [[reversal-trend-strength-filter-arc]] - same rounds 1+2, "the single strongest individual filter across two backtest rounds" (+Rs7,131.50 on 37 trades/2 days, +Rs17,123.00 on 139 trades/15 days) (`19c551d`) | Reflected in every row from 16 Sep onward |
 
 ### 14 Sep 2026
 
