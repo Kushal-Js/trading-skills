@@ -185,3 +185,32 @@ Swing (separate, non-gated strategy, unaffected by this whole
 investigation) had its own real day: NATURALGAS + COPPER round-trips
 netting -2,900.00 - noted for full-account context, not part of this
 comparison.
+
+## Full rollback completed (same day, after market close)
+
+Following the Luxury-only rollback and its clean result, user asked to
+also roll back Options and Futures - all three breakout-gated strategies
+are now back on original (pre-21-Sep-loosening) params:
+
+| | clearance | body | rel. volume | avg daily volume |
+|---|---:|---:|---:|---:|
+| Options (original) | 0.3% | 0.5% (unchanged) | 1.2x | 500,000 |
+| Futures (original) | 0.3% | 0.5% (unchanged) | 1.2x | 500,000 |
+| Luxury (original) | 0.5% | 1.0% | 1.5x | 500,000 |
+
+Note Options/Futures' own original clearance/relvol floor (0.3%/1.2x) was
+already looser than Luxury's (0.5%/1.5x) before any of this - the 21 Sep
+loosening moved all three down further, by different amounts, to a
+common clearance=0.15%/relvol=0.8x/avgvol=300k. Body% was never touched
+by the loosening for any of the three.
+
+Deployed after market close (all positions flat, zero live-position risk)
+- dry-run import check passed, restart verified via `/health` and all
+three scanners' own startup log lines. No Options/Futures-specific cost
+analysis was done before this rollback (unlike Luxury) since both were
+having a fine real day (Options 1W/0L, Futures 2W/1L) - this rollback is
+precautionary/consistency-driven, not evidence-driven the way Luxury's
+was. Worth revisiting with the same real-candle-check methodology once
+Options/Futures produce enough of their own real trades under looser
+params to judge whether they needed it too, or whether it turns out they
+were fine leaving it looser (open question, not yet answered).
