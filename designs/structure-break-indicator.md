@@ -56,9 +56,33 @@ hit the existing local-auth guard from
 (refused to `pin_totp` from a local process, telling the user to use a
 handed-off access token instead) rather than crashing or risking kicking
 the live droplet bot's session - confirms the error-handling path works,
-not just the happy path. A full live multi-timeframe run against real
-market data hasn't been done yet (needs `HANDOFF_DHAN_ACCESS_TOKEN` or
-running it from a context where a session is already authenticated).
+not just the happy path.
+
+**Bug found and fixed the same day**: the first version of
+`fetch_timeframe` let `dhan_wrapper.client` lazily call `authenticate()`
+directly, which reads `Options.config.DHAN_AUTH_MODE`/`DHAN_ACCESS_TOKEN`
+only - it never looked at `HANDOFF_DHAN_ACCESS_TOKEN` at all. That env var
+is NOT auto-read anywhere in `dhan_client.py`; every existing caller
+(`backtest_all_fno_breakout_signal_15day.py`'s
+`_authenticate_avoiding_session_collision`,
+`backtest_ws_candle_reconstruction_parity.py`) does its own explicit
+translation - `os.environ.get("HANDOFF_DHAN_ACCESS_TOKEN")` ->
+`ocfg.DHAN_AUTH_MODE = "access_token"` / `ocfg.DHAN_ACCESS_TOKEN = handoff`
+- *before* calling `authenticate()`. `dhan_client.py`'s own session-
+collision guard error message (line ~419) names
+`HANDOFF_DHAN_ACCESS_TOKEN` as if it were globally wired, which reads as a
+real mechanism but is actually just a *convention* every caller has to
+implement itself - worth remembering next time a new script hits the same
+DH-901 "invalid or expired" red herring (the token was fine; it was never
+being read). Fixed by adding `structure_break.py`'s own
+`_ensure_authenticated()`, mirroring the same pattern. A user handed a
+live token to Claude twice in chat while debugging this before Claude
+caught and explained the standing refusal to handle API tokens itself
+(see the session transcript, not reproduced here) - both tokens should be
+treated as compromised/rotate-worthy since they're now in chat history. A
+full live multi-timeframe run against real market data with a valid,
+correctly-wired token hasn't been confirmed yet - that's on the user to
+run locally per the skill's own instructions.
 
 ## What this is NOT
 
