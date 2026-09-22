@@ -82,15 +82,27 @@ all 4 packages before and after, health OK.
 
 ## What's still open
 
-**Not yet validated against fresh live data post-fix** - the market went
-fully quiet (13+ minutes with zero new ticks) before a fresh bar could
-complete and be compared against a real REST candle after this fix
-landed. The fix's correctness is established by code-level reasoning +
-the empirical LTT-timezone verification + comprehensive unit tests, but
-the actual open-price accuracy IMPROVEMENT (does the exact-match rate
-actually go up on TCS/ICICIBANK specifically) needs a live check at the
-next market open, using `/debug/underlying-feed/parity/{symbol}` the
-same way this whole investigation has throughout the day.
+**Still not validated against fresh live data post-fix.** The market
+went fully quiet (13+ minutes with zero new ticks) before a fresh bar
+could complete and be compared against a real REST candle right after
+this fix landed. A same-day follow-up attempt (~16:45-18:20 IST, after
+15:30 IST market close) also came back with zero usable samples -
+`recon_bar_count` 0-1 vs `real_bar_count: 73` on all 8 test symbols,
+because the check ran outside trading hours and two unrelated
+`dhanboy` service restarts during the check (11:16 UTC and 12:46 UTC)
+each wiped the WS feed's in-memory subscription state before any real
+trade could be captured. See [[ws-candle-reconstruction-parity-results]]'s
+"22 Sep evening re-check attempt" section for the full detail. No live
+positions or config were touched by this check.
+
+The fix's correctness is established by code-level reasoning + the
+empirical LTT-timezone verification + comprehensive unit tests, but the
+actual open-price accuracy IMPROVEMENT (does the exact-match rate
+actually go up on TCS/ICICIBANK specifically) still needs a live check
+during actual NSE trading hours (09:15-15:30 IST), ideally subscribing
+right at 09:15 IST open before any restart can wipe accumulated bars,
+using `/debug/underlying-feed/parity/{symbol}` the same way this whole
+investigation has throughout the day.
 
 `BREAKOUT_USE_WS_CANDLES` stays off until that live re-validation
 confirms the fix actually closes the gap, not just that it should in

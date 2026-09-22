@@ -303,3 +303,50 @@ actual accuracy improvement (does TCS/ICICIBANK's exact-match rate
 genuinely go up) needs checking at the next market open via
 `/debug/underlying-feed/parity/{symbol}`, same method used all day.
 `BREAKOUT_USE_WS_CANDLES` stays off until that confirms it.
+
+## 22 Sep evening re-check attempt: no usable data, ran after market close
+
+A same-day follow-up check (scheduled task, ~16:45-18:20 IST) tried to
+gather fresh post-fix live bars for the same 8 test symbols
+(RELIANCE, TCS, MAHABANK, IDEA, HDFCBANK, ICICIBANK, SBIN, ITC), but
+the timing didn't work out:
+
+- **Ran after NSE close.** First check was already 16:45 IST - over an
+  hour past the 15:30 IST close. `last_tick_age_seconds` on the two
+  symbols that had any bar at all (RELIANCE, TCS - 1 bar each) was
+  ~2900-3000s (~49 min), consistent with post-close stale LTP/LTT
+  re-pushes on the Quote feed, not genuine new trades - the same
+  staleness pattern already documented in
+  [[2026-09-22-ws-candle-open-price-root-cause-ltt]]'s own timezone
+  verification section.
+- **Two `dhanboy` service restarts happened mid-check**, ~90 minutes
+  apart (11:16 UTC / 16:46 IST, then 12:46 UTC / 18:16 IST per
+  `systemctl status`). Each restart wipes `underlying_candle_feed`'s
+  in-memory subscription set (confirmed: `/debug/underlying-feed/
+  snapshot` went from `{}` -> partial data (RELIANCE/TCS 1 bar each)
+  -> `{}` again across the two restarts). Neither restart was caused by
+  this check - health stayed OK throughout, `/positions` showed 0 open
+  NSE/Options/Luxury/Futures positions and one legitimate open MCX
+  COPPER options position (Luxury bucket, opened 12:46:42 UTC, right
+  after the second restart) untouched by this read-only check.
+- **Result**: `curl .../debug/underlying-feed/parity/{symbol}` for all
+  8 symbols came back `recon_bar_count: 0` (6 symbols) or `1` (RELIANCE,
+  TCS) against `real_bar_count: 73` (full day's REST candles, since the
+  trading day had already ended) - `matched_bars: 0` everywhere. **Zero
+  usable samples** - cannot answer whether TCS/ICICIBANK's exact-match
+  rate improved post-fix from this run. Not a negative result on the fix
+  itself, just no data either way.
+
+**Root cause of why this specific attempt failed**: the check ran well
+outside NSE trading hours, and the WS feed's subscription state is
+in-memory-only (by design, restores from disk on re-subscribe) - two
+unrelated restarts during a no-new-ticks window meant there was no
+window where both (a) the symbols were subscribed and (b) real trades
+were still happening on the exchange.
+
+**Next step (unchanged from above, still not done)**: needs the next
+NSE trading session, symbols subscribed at/near 09:15 IST open (not
+mid-morning, to avoid the mid-day-subscribe volume-baseline edge case
+already fixed separately), and a full-day or multi-hour check via
+`/debug/underlying-feed/parity/{symbol}` before any restart can wipe
+the accumulated bars. `BREAKOUT_USE_WS_CANDLES` stays off.
