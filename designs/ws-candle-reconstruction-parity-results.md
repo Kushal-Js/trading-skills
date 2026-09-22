@@ -217,3 +217,54 @@ collected - the NEXT parity report, or a fresh manual check, should show
 the first-bar overshoots gone). The open-price gap is untouched by
 today's fix and remains the harder, still-unsolved half of this
 investigation.
+
+## Why the automated 15:40 IST report itself came back empty
+
+The scheduled `ws-candle-parity.timer` report for 22 Sep
+(`history/2026-09-22_ws_candle_parity_report.json`) shows
+`recon_bar_count: 0` for all 8 test symbols against `real_bar_count: 73`
+- i.e. by the numbers alone, today's automated end-of-day check looks
+like a total failure. **It is not a WS-reconstruction failure** - the
+11:13 IST manual check documented above already proved reconstruction
+was producing real bars that morning. The automated report came back
+empty because of a separate, unrelated operational gap:
+
+`ws_candle_parity_check.py`'s own `maybe_subscribe()` only ever called
+the bot's `/debug/underlying-feed/subscribe` endpoint **once** per day
+(gated on a `state["subscribed"]` flag persisted to disk). `underlying_
+candle_feed`'s subscription set is in-memory only inside the bot
+process - restarting the bot wipes it completely. The bot restarted
+**5 times** after the 10:00 IST subscribe call that day (04:38:44,
+06:01:13, 08:09:33, 09:16:38 UTC - all legitimate, unrelated live-bug
+fixes/deploys, unconnected to this investigation), and this script never
+noticed any of them, so it never told the newly-restarted process to
+re-subscribe. The result: the running process had these 8 symbols
+subscribed for roughly the first 8 minutes of the session (10:00-10:08
+IST - the window the 11:13 IST manual check's own data actually came
+from, captured before the first restart destroyed it) and then **zero
+minutes** for the remaining ~5.5 hours, including the entire second
+half of the day the scheduled report was supposed to cover.
+
+**Fixed same day** (`a701821`): `maybe_subscribe()` now calls the
+subscribe endpoint on every ~5-minute timer tick between `SUBSCRIBE_
+TIME_IST` and `REPORT_TIME_IST`, not once. `underlying_candle_feed.
+subscribe()` is already idempotent and, per its own docstring, restores
+a symbol's persisted bars from disk and resumes live ticks the first
+time a given *process* sees it - so this self-heals across any number
+of bot restarts during the day, at the cost of one cheap no-op HTTP call
+per tick when nothing has changed. No code in `underlying_candle_feed.py`
+itself needed to change for this - the restore-from-disk mechanism was
+already there, this script just never gave a fresh process the chance
+to use it.
+
+**Net effect on the actual open-price question**: unresolved, still.
+The best real evidence remains the 11:13 IST manual check documented
+above (`open_and_close_exact_matches` from 3/12 to 11/12 depending on
+symbol) - a real, if short (12-bar), live sample. The automated report's
+own emptiness is a tooling gap now fixed, not new evidence either way.
+**Next run of `ws-candle-parity.timer` (or a manual re-check) should
+finally produce a full-day sample**, assuming no restart happens to
+interact badly with the FIX itself (unlikely, since the fix specifically
+targets surviving restarts) - that full-day sample is what should
+actually settle the open-price question, not another partial morning
+snapshot.
