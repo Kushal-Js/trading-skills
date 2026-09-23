@@ -62,6 +62,18 @@ existed for this reason) - `security_id` is Dhan's only reliable cross-
 endpoint identifier; any NEW code that matches broker data by symbol
 string should be treated as a latent bug, not a convenience.
 
+**Update, same day (commit `d54f270`)**: the `reconcile_broker_positions()`
+fix above was applied to Options/Futures/Luxury only at first. Swing has
+its own separate `reconcile_broker_positions()` with the identical gap
+(no resting-stop-loss discovery on restart), closed the same day before
+`SWING_V2_BROKER_STOP_LOSS_ENABLED` was turned on live for the first
+time - Swing had a real open COPPER position at the time that would
+otherwise have been exposed to this exact class of bug on its very next
+restart. One difference from the other three packages: Swing is
+side-aware (a SHORT position's resting stop order is a BUY, not a SELL),
+so it uses `exit_transaction_type(side)` rather than a hardcoded
+`"SELL"`.
+
 ## Incident 2: ICICIPRULI's real BUY order stuck PENDING for 10+ minutes
 
 **Symptom** (user-reported): a real BUY market order for `ICICIPRULI 29

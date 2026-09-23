@@ -92,6 +92,7 @@ judge yet - flagged explicitly).
 
 | Change | Strategy | Backtest evidence | Real PnL since |
 |---|---|---|---|
+| **Swing: gated entry-evaluation to real market hours, added a weekly Friday square-off** (`Swing/trading_engine.py`/`signals.py`/`config.py`, commit `cc70363`) - a post-market-close system check found `monitor_loop`'s entry-evaluation path (`get_regime_state`/`get_supertrend_state`, the structure-break refresh loop) ran completely unconditionally every 5s, 24/7, for zero possible benefit (no candle forms and no order can fill outside real trading hours). Confirmed live: 39 `DH-904` rate-limit hits in under an hour, well after midnight. Added `_symbol_market_open` (MCX-vs-NSE aware, since MCX's session runs materially longer - reuses the `is_market_open(exchange_segment=...)` split from the 15 Sep MCX-hours fix below) to gate both entry-evaluation paths; exit-checking on an already-open position is untouched, by design (Swing carries positions across ordinary days). Also added a new weekly Friday square-off (`FRIDAY_SQUARE_OFF_TIME`, default 15:25 IST) - every open Swing position, NSE and MCX alike, force-closed by Friday close with no new entries for the rest of the week, to avoid weekend gap risk. See [[2026-09-22-swing-overnight-polling-and-friday-squareoff-fix]]. **Backfilled into this journal 23 Sep** - originally deployed same night, its own entry was missed at the time; caught by a follow-up "scan for gaps across all 4 packages" audit. | Swing | Live rate-limit-hit evidence (39 DH-904s/hour), not a backtest - infra/scheduling fix plus a new risk-management rule. | N/A - deployed 23 Sep 00:11 IST (well after market close, 0 live positions to disturb). Not yet independently re-verified against a real Friday close (next Friday after this deploy will be the first live test of the square-off path itself). |
 | **Generalized the 22 Sep monitor-loop-freeze fix to every blocking Dhan order/LTP call, in all four packages** (`Swing/Futures/Luxury/Options/trading_engine.py`, commit `5d49c49`) - a live-code audit (user request: "scan live code for any bugs or bot induced latency or signal lag or race conditions") found the 22 Sep fix (`asyncio.wait_for` around Swing's own `_get_ltp`, see [[2026-09-22-swing-signal-cache-never-throttled-on-failure]]'s related incident) only ever covered that one call site. Every other `run_in_executor(None, dhan_wrapper.X)` call in all four packages - `wait_for_order_result` (entry AND exit, every real order placement), `refresh_order_status`, `check_if_order_filled`, `cancel_order`, plus Futures/Luxury/Options' own `_get_ltp` (which never got the 22 Sep fix at all) - still had no asyncio-level timeout, inheriting dhanhq's ~60s default HTTP timeout compounded by `wait_for_order_result`'s own internal 6-attempt retry loop. Added `_LTP_FETCH_TIMEOUT_SECONDS=10s`, `_ORDER_STATUS_TIMEOUT_SECONDS=10s`, `_ORDER_RESULT_TIMEOUT_SECONDS=30s` to all four files. On a `wait_for_order_result` timeout, synthesizes `OrderResult(status=TRANSIT)` rather than letting the exception propagate raw, so it flows into each package's existing "not yet terminal after poll budget" handling (the already-proven PAGEIND 17 Sep 2026 recovery path) instead of a new, untested failure mode. Also confirmed (not fixed, documented as lower-severity-now): all four packages share ONE `ThreadPoolExecutor` sized by `EXECUTOR_MAX_WORKERS` (`main.py`, live value 5) - a hang in any package's REST call occupies a shared worker thread every other package also depends on; bounded to 10-30s now instead of open-ended. | Options, Futures, Luxury, Swing | No backtest - pure infra/timeout fix, no signal or risk-parameter change. Verified via full test-suite regression (`git stash`/restore comparison, identical 18 pre-existing failures before and after, root-caused to a wall-clock-time-sensitive market-open guard in `_handle_ltp_staleness` unrelated to this change - confirmed via isolated repro, not assumed). | N/A - deployed same session (restart ~08:42 IST, before market open, 0 live positions across all 4 packages before/after, `/health` OK, Dhan auth clean). Nothing to reconcile since nothing was open. Worth a spot-check next time any package's `wait_for_order_result`/`refresh_order_status` path actually hits a slow/hung Dhan response, to confirm the timeout fires as designed rather than assuming from the code alone. |
 
 ### 22 Sep 2026
@@ -351,6 +352,12 @@ tracebacks in the log.
 |---|---|---|---|
 | Breakout-signal live entry trigger deployed (flag-enabled), separate CE/PE watchlists with daily refresh | Luxury | [[breakout-scanner-vs-real-pnl]] (original recalibration work) + [[luxury-signal-gated-live-simulation]] (real-gate replication, +Rs32,649.10 on the real exit stack before the config raise above) | 0 real trades attributed to the signal path through 21 Sep (feature just launched; normal alert-driven trading continued in parallel and is what's reflected in the 17/18 Sep rows above) |
 
+### 19 Sep 2026
+
+| Change | Strategy | Backtest evidence | Real PnL since |
+|---|---|---|---|
+| **Opening-burst extra CE capacity slot, actual code deploy** (`_cap_for()` in each package's `position_store.py` adds `BURST_EXTRA_SLOTS_CE` to `MAX_LIVE_POSITIONS_CE` while inside the configured 09:15-10:00 IST window - wired through the real `reserve_symbol()`/`remaining_capacity()` enforcement path, not a cosmetic flag; CE only, the backtest never modeled PE) (commit `d454d74`, `tests/test_burst_capacity.py`) - the backtest (17 Sep, see row above) and this deploy are 2 days apart; the journal previously conflated them into one 17-Sep row. Deployed flag-on by default per explicit user request despite the backtest's own thin-sample caveat (15-37 picks over 6 days) - user chose to ship live rather than flag-off first. **Backfilled into this journal 23 Sep** - the deploy itself was missed at the time (only the earlier backtest got logged); caught by a follow-up cross-package documentation audit. | Options, Futures, Luxury | [[opening-burst-slot-and-sl-target-sensitivity]] (same backtest as the 17 Sep row above) | Reflected in the 20/21/22 Sep rows above once enough days accumulate under it specifically - not yet separately isolated from the base capacity config. |
+
 ### 18 Sep 2026 (bundle - multiple commits same day)
 
 Option-liquidity entry gate added (SOLARINDS-style illiquidity
@@ -367,7 +374,7 @@ than a single strategy pivot.
 
 | Change | Strategy | Backtest evidence | Real PnL since |
 |---|---|---|---|
-| Opening-burst extra CE capacity slot (+1 slot, 09:15-10:00) | Options/Futures/Luxury | [[opening-burst-slot-and-sl-target-sensitivity]] | Reflected in the 17/18 Sep rows above (still net negative for Options/Futures those days) |
+| Opening-burst extra CE capacity slot backtested (+1 slot, 09:15-10:00 IST, 6 days of real alert/shadow data - a single extra slot held open the full window beat a second permanent slot by cycling through positions as they resolve) | Options/Futures/Luxury | [[opening-burst-slot-and-sl-target-sensitivity]] | Backtest only on this date - see 19 Sep below for the actual code deploy (this row previously read as if deployed here; **corrected 23 Sep** after a cross-package audit found the real commit is dated 19 Sep, 2 days after this backtest) |
 | Global liquid-contract-resolution gate (`get_liquid_atm_option`) | All 4 (Options/Futures/Luxury/Swing) | [[liquid-contract-resolution]] - built after the ATHERENERG broker-stop-rejection incident | Reflected in every row from 17 Sep onward |
 | Kaufman Efficiency Ratio added as a shadow-mode-only logging field (never blocks, threshold 0.3); Futures ported Options' live volume-floor gate (1.2 ratio); Swing got ADX/RSI/volume-ratio/ER shadow logging on every real entry | Options/Futures/Luxury (ER logging), Futures (volume floor), Swing (shadow logging only) | [[reversal-trend-strength-filter-arc]] - rounds 3/4 of the same arc (`b43a873`, `416b3ff`); ER's standalone evidence (+Rs10,925.75/143 trades, +Rs5,561.25 incremental over the live volume floor) judged "thin and lumpy" (85% from one day), so kept shadow-only | Reflected in every row from 17 Sep onward (volume floor); ER logging is diagnostic only, no real-trade effect |
 | `LOSS_REENTRY_TREND_CHECK_ENABLED`: live ADX(>=20)/ER(>=0.3) re-entry gate (either one passing is enough) for Options/Futures/Luxury, gating a re-entry on a symbol that already lost money today | Options/Futures/Luxury | [[reversal-trend-strength-filter-arc]] (round 1-4 findings, `d758e6b`) - real incident: ATHERENERG 29 SEP 1540 PUT (17 Sep) whipsawed out via SUPERTREND_EXIT with a logged ADX of 13.24 (well below the 20 threshold), then a same-day re-entry lost again; see also the 18 Sep bundle row below for this same commit's loss-repeat-block broadening | Reflected in every row from 18 Sep onward (also see 18 Sep bundle below) |
@@ -379,6 +386,18 @@ than a single strategy pivot.
 | Shadow-mode-only logging of ADX/RSI/volume-ratio/RSI-extreme-plus-volume-spike "climax combo"/post-SUPERTREND_EXIT cooldown for every real entry (`reversal_filters.py`, never blocks) | Options/Futures/Luxury | [[reversal-trend-strength-filter-arc]] - rounds 1+2 of a 5-round arc triggered by that morning's PAYTM (22s, -Rs4,603.75) and YESBANK (61s, -Rs4,043.00) near-instant reversals (`5291efa`) | Diagnostic only, no real-trade effect |
 | Volume floor promoted from shadow-mode to a **live blocking gate** (entry-candle volume < 1.2x its 20-bar average blocks the entry), Options + Swing/MCX only | Options, Swing (MCX symbols only) | [[reversal-trend-strength-filter-arc]] - same rounds 1+2, "the single strongest individual filter across two backtest rounds" (+Rs7,131.50 on 37 trades/2 days, +Rs17,123.00 on 139 trades/15 days) (`19c551d`) | Reflected in every row from 16 Sep onward |
 
+### 15 Sep 2026
+
+**Backfilled into this journal 23 Sep** - all three rows below were missed
+at the time despite each having a real commit (and, for the first two, a
+real incident); caught by a follow-up cross-package documentation audit.
+
+| Change | Strategy | Backtest evidence | Real PnL since |
+|---|---|---|---|
+| **Swing: PROFIT_PROTECTION_RS/GIVEBACK_PCT split by basket_type for OPTIONS** (`PROFIT_PROTECTION_RS_OPTIONS`/`_GIVEBACK_PCT_OPTIONS`, commit `3ddc59a`) - user request straight off switching `BASKET_TYPE` to options: the existing flat 5000/2% thresholds were tuned against FUTURES-notional P&L, and an option's own premium swings represent a much smaller absolute rupee move for the same underlying move, so the same threshold armed far later relative to a typical options trade's real profit potential. Falls back to the shared value when unset (FUTURES/EQUITY baskets unaffected), evaluated fresh off `position.basket_type` on every exit check, not baked in at entry. Deployed: `SWING_PROFIT_PROTECTION_RS_OPTIONS=2000`, `SWING_PROFIT_PROTECTION_GIVEBACK_PCT_OPTIONS=0.02`. Same pattern later extended by exchange segment rather than basket_type - see the 23 Sep MCX-specific `PROFIT_PROTECTION_RS_MCX=4000` change elsewhere in this repo's `.env` history. | Swing | User request, no backtest - risk-parameter retune off a structural observation (options premium vs futures notional), not a signal change. Full `test_swing_v2_*` suite (30 tests) re-verified unchanged. | N/A - too new to judge at the time; superseded in practice once COPPER structure-break went live 22 Sep under its own separate config. |
+| **Swing/COPPER placed 4 duplicate real BUY orders** - `is_market_open()` checked only NSE hours regardless of segment, wrongly AMO-tagging a genuinely-live 20:10 IST MCX order; Swing's strict TRADED-only fill discipline then hot-retried the "failed" entry every 5s with no cooldown until Dhan's margin engine started rejecting with `DH-906`. Fixed same day (`2023e09`): MCX-aware `is_market_open(exchange_segment=...)`, plus a new 180s per-symbol `ENTRY_RETRY_COOLDOWN_SECONDS` closing the underlying retry-storm risk independently of this specific trigger. See [[2026-09-15-swing-copper-mcx-hours-duplicate-entry-orders]] and its Known-issues row above. | Swing | Real incident, direct evidence (4 confirmed-cancelled duplicate orders, DH-906 rejections) - not a backtest. New tests: `test_mcx_market_hours.py` (4), `test_swing_entry_retry_cooldown.py` (5). | N/A - all 4 duplicate orders confirmed cancelled at the broker before this fix deployed; no residual exposure. |
+| **Swing: proactively discover resting broker stop-loss on reconciliation** (commit `d54f270`) - closed the same `reconcile_broker_positions()` gap the JSWENERGY incident found in Options/Futures/Luxury earlier the same day, applied to Swing specifically ahead of turning `SWING_V2_BROKER_STOP_LOSS_ENABLED` on live for the first time (Swing had a real open COPPER position at the time). Side-aware (a SHORT's resting order is a BUY, not a SELL) via `exit_transaction_type(side)`, unlike the other three packages' hardcoded `"SELL"`. See [[2026-09-15-jswenergy-orphaned-stop-loss-and-icicipruli-stuck-order]]'s "Update, same day" section. | Swing | Direct defense-in-depth fix ahead of a live risk-parameter flip, not a backtest. | N/A - preventive; no incident traced to this specific gap for Swing (unlike JSWENERGY itself, which was the Options/Futures/Luxury instance of the same bug). |
+
 ### 14 Sep 2026
 
 - Nifty gap-down max-delay ceiling lowered 120→30 minutes
@@ -389,6 +408,26 @@ than a single strategy pivot.
 - `EXECUTOR_MAX_WORKERS` held at 5 pending a live-hours observation
   window - see [[executor-sizing-ws-storm-on-closed-market]] (incident,
   13 Sep) for why this is deliberately not yet raised to 10.
+
+### 13 Sep 2026
+
+**Backfilled into this journal 23 Sep** - missed at the time, caught by a
+follow-up cross-package documentation audit.
+
+- **Swing v2: Copper always trades OPTIONS, independent of the global
+  `BASKET_TYPE`** (commit `18c0856`) - user correction (12 Sep, deployed
+  just after midnight 13 Sep) in two parts: Copper no longer SKIPS
+  entirely when `BASKET_TYPE` happens to be "futures" (now always enters
+  as OPTIONS regardless), and the override is scoped to a new, separate
+  `MCX_OPTIONS_ONLY_SYMBOLS` set (default `COPPER`) rather than a blanket
+  rule for every `MCX_SYMBOLS` member, so a future MCX symbol could still
+  route through the plain futures path if that's ever wanted. Computed
+  as an `effective_basket_type` used everywhere (side resolution,
+  instrument-branch dispatch, funds-check payloads, the stored
+  `Position`) instead of the raw global config. User request, no
+  backtest - a scoping/behavior correction, not a signal change. Full
+  test suite re-verified (`tests/test_swing_v2_mcx_entry_exit.py` test 2
+  rewritten, new test 5 added as the scoping regression guard).
 
 ### 12 Sep 2026
 
@@ -492,6 +531,8 @@ but have no directly-attributable real before/after PnL here.
 | 22 Sep | [[2026-09-22-dispatcher-crash-loop-market-open]] | UniverseDispatcher crashed every 60s scan cycle from ~09:10 IST market open (`AttributeError` on a config flag only defined in Options' config, while the dispatcher read it off Luxury's via `primary_cfg = targets[0][1]`). Blocked every universe_bucket-sourced entry to Luxury+Futures for ~13 minutes real market time (27 CE/26 PE real alerts accumulated, zero entry attempts) - real trading impact, not hypothetical. Luxury's own independent scanner was unaffected (GVT&D/CGPOWER entries during the outage came through that path; GVT&D already closed +Rs1,775 TARGET_HIT). Fixed same session (`02b515a`), deployed with 3 real open positions across 2 packages, all confirmed reconciled correctly post-restart. |
 | 22 Sep | [[2026-09-22-ws-candle-open-price-root-cause-ltt]] | WS candle reconstruction's open-price mismatch (first found via live parity checks earlier the same day) root-caused: ticks bucketed by local receipt time instead of the exchange's own `LTT` (Last Trade Time), so a trade processed just after a 5-min boundary got misattributed to the wrong bar - corrupting that bar's open specifically while close/volume stayed accurate. No incorrect order placed (`BREAKOUT_USE_WS_CANDLES` has been off throughout this entire investigation). Fixed (`a6e026e`), deployed, unit-tested (5 new tests). **Still open as of 22 Sep evening**: a same-day re-check attempt ran after 15:30 IST market close and caught two mid-check `dhanboy` restarts, each wiping the WS feed's in-memory subscription state - zero usable post-fix bars collected (0-1 recon bars vs 73 real REST bars, all 8 test symbols). Live re-validation still needs the next trading session, subscribing at/near 09:15 IST open before any restart can wipe state. |
 | 21 Sep | [[2026-09-21-lici-negative-broker-sl-trigger]] | LICI (Options PE) broker-side SL-L order rejected - trigger price went negative for a cheap-premium/large-quantity position whose notional value was already below the rupee MAX_LOSS cap. Same bug in all 3 packages, fixed same day (commit `e70804d`). Real risk impact low - percentage-based STOP_LOSS_PCT hard stop was unaffected the whole time. |
+| 15 Sep | [[2026-09-15-swing-copper-mcx-hours-duplicate-entry-orders]] | Swing/COPPER placed 4 duplicate real BUY orders in under a minute after `is_market_open()` wrongly tagged a genuinely-live 20:10 IST MCX order as AMO (checked only NSE hours), which Swing's strict TRADED-only fill discipline then treated as a failed entry and hot-retried every 5s with no cooldown. All 4 confirmed cancelled at the broker by Dhan's own margin engine (`DH-906`) before the fix - no manual cleanup needed, but the retry mechanism itself was real. Fixed same day (`2023e09`): MCX-aware `is_market_open(exchange_segment=...)` split, plus a new `ENTRY_RETRY_COOLDOWN_SECONDS` (180s) closing the underlying retry-storm risk independent of this specific trigger. **Backfilled into this journal 23 Sep** - missed at the time, caught by a follow-up cross-package documentation audit. |
+| 23 Sep | [[2026-09-22-swing-overnight-polling-and-friday-squareoff-fix]] | Swing's entry-evaluation path (`get_regime_state`/`get_supertrend_state`, structure-break refresh) polled Dhan unconditionally every 5s, 24/7 - 39 real `DH-904` rate-limit hits confirmed in under an hour overnight, zero possible benefit (nothing can fill outside trading hours). Fixed same night (`cc70363`): MCX-vs-NSE-aware market-hours gate on entry-evaluation only (exit-checking on an open position untouched by design); also added a new weekly Friday square-off. No incorrect order placed - pure rate-limit/resource-waste impact, not a trading-correctness bug. **Backfilled into this journal 23 Sep** - missed at the time despite having its own incident doc from the night it happened; caught by a follow-up cross-package documentation audit. |
 
 ## Live monitoring sessions
 
@@ -573,3 +614,19 @@ packages.
    log line, the `.env` comment, or the backtest number. If a past entry
    turns out wrong, correct it and say what changed, don't silently
    delete history (same standing style rule as the rest of this repo).
+5. **Cross-check against git log, not just memory of what was worked on
+   this session** - added 23 Sep 2026 after an audit found 6 real
+   commits (5 of them Swing-specific, clustered 13-15 Sep and 23 Sep)
+   that never made it into this journal despite being real deploys, one
+   with its own orphaned incident doc nobody had linked in. The failure
+   mode: logging happens from what the CURRENT session remembers doing,
+   which silently misses anything a different session/agent deployed.
+   Concretely, before considering a deployment-related task done, or at
+   least every ~1-2 weeks alongside step 2's real-PnL pull: run
+   `git log --oneline --since=<last journal date> -- Options/ Futures/
+   Luxury/ Swing/` in `traderBoy`, and for each commit not already
+   referenced by hash anywhere in this journal, decide (same judgment
+   call as step 1) whether it's worth a row. Pay particular attention to
+   whichever package got the LEAST session time recently - that's
+   exactly where a gap accumulates unnoticed, since nobody's actively
+   looking at it to write about.
