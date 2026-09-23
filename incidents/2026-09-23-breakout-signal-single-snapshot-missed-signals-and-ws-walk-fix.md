@@ -85,3 +85,45 @@ deployed/restarted on the droplet without the user's explicit go-ahead, especial
 written during live market hours. Next step before going live: ideally a WS-parity-style replay
 of the new code path against a real day's data (similar rigor to
 `backtest_ws_candle_reconstruction_parity.py`), then deploy+restart per the normal checklist.
+
+## Second real confirmation, same day: IDFCFIRSTB (11:00-11:20 IST, -Rs2,318.75)
+
+A second live loss from the exact same mechanism, investigated separately a few hours after the
+above (still on the undeployed fix, so the old single-snapshot code was still live for this
+trade too). Full evidence chain (droplet `journalctl` + the persisted
+`history/2026-09-23_underlying_candles_IDFCFIRSTB.log`), not inferred:
+
+- IDFCFIRSTB was in the live Krishvi CE watchlist continuously from ~09:19 IST (first webhook
+  alert containing it) onward.
+- Real underlying candles: 86.99 at 09:55 -> 87.44 by 10:00 (vol 1.24M) -> **10:25 candle
+  87.50->88.11, body=+0.70%, volume 2.37M** (comfortably clears Luxury's live loosened
+  thresholds - body>=0.5%, relvol>=0.8x - the same config confirmed in the original analysis
+  above) -> 10:55 candle 88.65->89.40, volume 3.68M (the candle that actually triggered).
+- Live scanner confirmed the signal at **11:00:48 IST** (`range=1.24% body=0.85% relvol=3.64x`)
+  and entered within 6 seconds (11:00:54) at underlying ~89.34-89.40, option entry Rs1.27
+  (IDFCFIRSTB 29 SEP 89 CALL). This was NOT a slow reaction to a valid candle - it reacted to
+  the 10:55 candle within 48s of it closing. **The bug is that the 10:25 candle, ~35 minutes
+  and ~1.4% of underlying price earlier, was never re-examined** once the scanner's single-
+  snapshot check on some earlier tick didn't land on it.
+- Own shadow reversal-filter log at entry: `RSI=79.92 ADX=69.68 VolRatio=0.2 ER=0.584 ->
+  recommended_combo_blocks=True` - the bot's own (not-yet-wired-in) filter flagged this exact
+  entry as over-extended at the moment it was taken.
+- Result: SL hit 20 minutes later (11:20:32 IST), exit 1.02, **-Rs2,318.75 / -19.69%**.
+- Compounding factor specific to this trade: the live service was restarted **7 times today
+  during market hours** (08:00, 08:42, 09:21, 09:50, 09:56, 10:39, 10:56 IST - confirmed via
+  `journalctl`, all clean SIGTERM/status=143, i.e. deliberate deploy restarts, not crashes) for
+  unrelated deploy work. Each restart re-seeds `underlying_candle_feed` from its disk-persisted
+  bars (`restored N persisted bar(s) ... after a possible restart` - confirmed working, no data
+  loss), so this did not by itself cause the miss, but restarting the live scan rotation this
+  often during the exact window a symbol's real breakout candle was forming is worth avoiding
+  when deploy work happens to fall in market hours again.
+- Secondary, separate observation (not the cause of lateness, but affected exit quality): for
+  the whole 20 minutes this position was open, logs repeatedly show `Not enough 5-min candles
+  yet for IDFCFIRSTB Supertrend/EMA cross (0 bars)` - the dynamic/trailing exit logic had no
+  data to work with, so only the static broker-side SL-L (trigger 0.68/limit 0.65) protected
+  the position. Worth checking separately why that candle source was empty for this
+  freshly-added option series the whole time it was held.
+
+This confirms the WS-walk fix above is the correct, sufficient fix for the lateness question
+specifically (it would have caught the 10:25 candle) - it just hadn't been deployed yet when
+this second loss happened a few hours later the same day.
