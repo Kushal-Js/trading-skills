@@ -96,8 +96,8 @@ none of the 4 real CE losses in this sample would have been made worse
 by waiting for a bigger move first, since the tightened floor never
 beat the base stop in any of them anyway.
 
-**Scope**: Luxury CE only, matching what was asked and where the
-incident happened. Options showed the identical 100%-loses pattern
+**Scope (original)**: Luxury CE only, matching what was asked and where
+the incident happened. Options showed the identical 100%-loses pattern
 (MAZDOCK/HCLTECH, PE side) in the same window - not changed here,
 flagged as a natural follow-up if it keeps showing up.
 
@@ -111,3 +111,33 @@ matters enough to get right precisely, the real fix is logging
 trade record going forward, so a proper step-size sweep becomes
 possible. Revisit once a few weeks of real `TRAILING_SL_HIT` outcomes
 have accumulated under 0.20.
+
+## Follow-up (same day, 23 Sep 2026): extended to all 3 packages, both option types
+
+User asked to apply the same 0.20 step to CE **and** PE across Options,
+Futures, and Luxury - closing the gap this doc itself flagged (Options'
+identical pattern on MAZDOCK/HCLTECH PE), rather than leaving it as a
+"natural follow-up." `.env` now reads (all deployed, `git`-untracked by
+design - see [[project-dhanboy-deployment]]):
+
+| Var | Before | After |
+|---|---|---|
+| `DYNAMIC_SL_STEP_PCT_CE` (Options) | 0.07 | 0.20 |
+| `DYNAMIC_SL_STEP_PCT_PE` (Options) | 0.09 | 0.20 |
+| `FUTURES_DYNAMIC_SL_STEP_PCT_CE` | 0.07 (code default, no prior override) | 0.20 |
+| `FUTURES_DYNAMIC_SL_STEP_PCT_PE` | 0.09 (code default, no prior override) | 0.20 |
+| `LUXURY_DYNAMIC_SL_STEP_PCT_PE` | 0.09 | 0.20 |
+| `LUXURY_DYNAMIC_SL_STEP_PCT_CE` | 0.20 (already fixed above) | 0.20 (unchanged) |
+
+Same reasoning as the original CE fix applies identically to PE and to
+Futures - all three packages run the same `STOP_LOSS_PCT=0.16`/
+`FUTURES_STOP_LOSS_PCT=0.16`/`LUXURY_STOP_LOSS_PCT=0.16`, so 0.20 keeps
+the "must be ahead by more than the base stop's own width before
+dynamic tightening engages" principle consistent everywhere. Applied to
+both the droplet's live `.env` and the repo-local mirror copy the same
+way the original fix was staged. **Still not live in the running
+process** - `os.getenv()` is only read at import time, so this requires
+a `systemctl restart dhanboy.service` to take effect (same restart this
+doc's original fix was already waiting on). Check `/positions`,
+`/futures/positions`, `/luxury/positions` for open positions before
+that restart, per the usual checklist.
