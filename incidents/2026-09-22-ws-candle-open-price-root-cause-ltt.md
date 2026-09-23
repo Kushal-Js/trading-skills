@@ -158,3 +158,35 @@ yesterday ([[2026-09-22-swing-signal-cache-never-throttled-on-failure]])
 is already recurring this morning too (ASHOKLEY regime/Supertrend
 fetches failing at market open) - the account-wide call-budget question
 deferred yesterday is still open and appears to still be live today.
+
+## First clean bar (09:25-09:30 IST) - strong positive result
+
+No restart occurred between the 09:24 re-subscribe and 09:30, so the
+09:25 bar is the first one fully covered by continuous subscription -
+the fair test this whole investigation has been waiting for.
+
+| Symbol | Real open | Recon open | Open exact? | Real vol | Recon vol | Vol exact? |
+|---|---:|---:|---|---:|---:|---|
+| RELIANCE | 1244.8 | 1244.8 | YES | 72,147 | 69,332 | no (4% off) |
+| TCS | 2093.6 | 2093.6 | YES | 98,568 | 98,568 | YES |
+| MAHABANK | 83.32 | 83.32 | YES | 314,261 | 314,261 | YES |
+| IDEA | 14.31 | 14.31 | YES | 5,341,599 | 5,285,210 | no (~1% off) |
+| HDFCBANK | 735.2 | 735.2 | YES | 611,720 | 611,720 | YES |
+| ICICIBANK | 1339.7 | 1339.7 | YES | 86,273 | 86,273 | YES |
+| SBIN | 989.6 | 989.0 | no (0.6 off) | 72,237 | 72,237 | YES |
+| ITC | 266.4 | 266.35 | no (0.05 off) | 105,107 | 113,112 | no (7.6% off) |
+
+**6/8 exact open matches, 5/8 exact volume matches** - and the 2 open
+misses are fractional (0.6 rupees on SBIN, 0.05 on ITC), nothing like
+the multi-rupee gaps seen on yesterday's pre-fix data or on today's own
+confounded 09:15/09:20 bars above. Most notably: **TCS and ICICIBANK -
+yesterday's worst performers at 50% and 25% exact-match rates - are
+both exact on this clean bar.**
+
+Still n=1 clean bar - real evidence, not yet a large sample - but this
+is the first genuinely uncontaminated data point this investigation has
+produced, and it strongly supports the LTT fix working as intended.
+Worth accumulating more clean bars (ideally an uninterrupted stretch of
+several, which needs the restart pattern to settle down) before treating
+this as fully confirmed, but the direction and magnitude of the result
+are a clear positive signal.
