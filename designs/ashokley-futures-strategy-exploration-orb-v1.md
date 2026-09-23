@@ -1,5 +1,11 @@
 # ASHOKLEY futures strategy exploration - ORB "v1" is the best result so far (24 Sep 2026, user request)
 
+**UPDATE:** a later strategy, 1-hour-RSI-timed-on-5min-candles, was named
+**v2** and on the same 30-day window has a BETTER avg-PnL/trade than v1
+(+2,386 vs +357) with less tail risk - see
+[[ashokley-futures-1hour-rsi-5min-timing-v2]] for the full writeup and
+hold-time sweep (30/45/60 min).
+
 **Status: exploratory backtesting only - nothing here is deployed live.**
 ASHOKLEY is not on any package's live watchlist; every script below is a
 standalone backtest in `traderBoy` (repo root, not inside a package dir),
