@@ -1,8 +1,11 @@
 Status: RECALIBRATED 20 Sep 2026 (user-specified thresholds) - now
 produces real signals with a promising but thin-sample result (+Rs67,619
 over 32 signals, 90.6% win rate, vs real PnL of -Rs61,827.65 over the same
-14 days). Backtest-only - nothing wired into any live package, no
-sign-off given to deploy.
+14 days). Lookback-sensitivity check added 23 Sep 2026: shortening the
+consolidation window from 11 to 6 candles held quality steady and slightly
+increased frequency over a separate 10-day sample - see that section
+below. Backtest-only - nothing wired into any live package, no sign-off
+given to deploy.
 
 # Breakout-scanner screening rules vs real DhanBoy PnL
 
@@ -298,6 +301,67 @@ strategy claim, daily re-entry cap) run in this pipeline - a live signal
 would still have to clear every one of those before an order could
 actually go out, exactly as [[alert-bucket-switch]]'s own switch mechanism
 does.
+
+## Lookback-length sensitivity: 6-candle vs 11-candle consolidation window (23 Sep 2026)
+
+**What was asked**: does shortening Rule 1's consolidation lookback from
+10 prior candles (11-candle window: 10 prior + 1 current - today's live
+`BREAKOUT_LOOKBACK_CANDLES` default in Options/Futures/Luxury config)
+down to 5 prior candles (6-candle window) change the confirmed signals or
+PnL?
+
+**Method**: `traderBoy/backtest_breakout_scanner_6vs11_candle_10day.py`,
+new script that reuses this file's own `backtest_breakout_screener_vs_
+real.py` fetch/evaluate/exit-ladder machinery unchanged (same 1%/0.5%/
+12%/1.5x/500k thresholds above) and only re-parameterizes `LOOKBACK_
+CANDLES`, running both variants side by side against the same REAL
+Options+Futures+Luxury PnL over the last 10 trading days with complete
+`webhook_alerts`/`real_trades` logs: 07/08/09/10/11/15/16/17/18/21 Sep
+2026 (22 Sep has no real alert/trade logs - only a leftover fake test
+record in `position_opened.log`, `RELIANCE FAKE EXP CE`/`OID-RACE-1`; 23
+Sep was still an open market session at run time). Both variants share
+the same cached underlying/daily candle fetches per (symbol, day) - only
+the in-memory consolidation-range math differs, so the comparison is
+apples-to-apples.
+
+**Result**:
+
+| | Trades | Wins | Win Rate | Total PnL |
+|---|---|---|---|---|
+| REAL (Options/Futures/Luxury, 10 days) | 243 | 89 | 37% | -Rs58,095.90 |
+| SIM_6CANDLE (5 prior) | 28 | 27 | 96% | +Rs55,455.75 |
+| SIM_11CANDLE (10 prior, live default) | 27 | 26 | 96% | +Rs53,844.75 |
+
+Full day-wise and trade-wise breakdown in
+`traderBoy/history/breakout_scanner_6vs11_candle_10day_report.json`.
+
+The two variants diverge on exactly 2 of the 10 days:
+- **15 Sep**: 6-candle additionally caught `BAJAJFINSV PE` (+Rs1,191)
+  that 11-candle missed entirely - a signal that only clears Rule 1 when
+  the consolidation window is short enough to exclude some volatility
+  further back.
+- **16 Sep**: 6-candle fired on `SAGILITY CE` (+Rs1,968) instead of
+  `PATANJALI CE` (+Rs1,548) that 11-candle caught - different symbol
+  entirely, both winners, so this is the scanner's "first qualifying
+  candle wins" rule picking a different candidate, not a quality gap.
+
+Net: 6-candle produced **+Rs1,611 more** total PnL on 1 extra trade
+(28 vs 27); win rate is effectively identical (96% either way, one extra
+win). **Shortening the lookback did not degrade signal quality on this
+sample and modestly increased signal frequency** - but with only 27-28
+confirmed signals across 10 days, this is far too thin a sample to call
+it a systematic improvement rather than noise. A shorter consolidation
+window mechanically requires less time to qualify as "quiet," so it will
+structurally fire at least as often as the longer window (a signal valid
+under 11 candles is not guaranteed to still qualify under 6, since the
+5 additional candles it drops could have been the ones keeping the
+overall range small - hence the 15 Sep case going the other way, gaining
+a signal the longer window didn't have).
+
+**Not yet answered**: whether a 6-candle window starts admitting noisier,
+lower-quality setups over a longer sample (more days needed), and whether
+it changes the "gap-and-go at 09:15" clustering pattern documented above
+(not re-checked for this comparison).
 
 ## What's still open
 
