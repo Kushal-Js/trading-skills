@@ -66,7 +66,15 @@ still real and open at the broker. Not the same bug, not the same fix.
 ## Status
 
 User closed the position manually via the Dhan app on 23 Sep after this
-investigation. No code fix has been deployed yet - see "recommended fixes"
+investigation. **Realized profit: Rs416.25** (entry Rs5.69, target had been
+Rs6.83 - the manual close came in above entry but the exact exit price/time
+wasn't captured here since it was executed directly on the broker app, not
+through the bot). Real money outcome: positive despite ~22h of the position
+being completely unmanaged - this could just as easily have gone the other
+way with nothing watching the stop-loss either, which is the actual risk
+this incident is about, independent of how this particular case resolved.
+
+No code fix has been deployed yet - see "recommended fixes"
 below, deliberately not applied same-session per
 [[feedback-live-trading-safety]] (no urgency once manually closed, and the
 reconciliation-gap root cause itself isn't fully understood yet, which
