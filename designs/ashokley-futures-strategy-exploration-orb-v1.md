@@ -97,18 +97,70 @@ strategies (see #12's -19,350/-7,500 overnight trades, #6-8's big single
 winners). 8 trades is also a small sample - 87.5% win rate on 8 trades is
 encouraging, not strong statistical evidence.
 
+## UPDATE 24 Sep 2026: 30-day re-test confirms the sample-size caveat was
+## warranted - the picture is materially different at scale
+
+User asked to extend the window per the "test longer for a larger sample"
+option raised above. Re-ran the identical v1 script/params
+(`opening_range_minutes=15 rr_multiple=2.0`) over the last 30 trading
+days (2026-08-12 to 2026-09-23, i.e. the original 10-day window PLUS 20
+earlier days never backtested before):
+
+**27 trades, 13 wins/14 losses (48.1% - down from 87.5%), net +Rs9,650
+(down from +Rs44,800), avg +Rs357/trade (down from +Rs5,600/trade).**
+
+The earlier 20 days (08/12-09/08, not in the original 10-day sample)
+included a brutal stretch of **6 consecutive-ish STOP_HIT losses between
+08/13 and 08/24**: -18,200 / -10,500 / -18,600 / -6,700 / -6,450 / -7,500
+(sum -67,950, avg -11,325/loss) - this is exactly the tail risk the
+original 10-day sample never surfaced, because in that window every
+single trade happened to exit at EOD instead. One TARGET_HIT trade
+(+14,700, 09/04) also only shows up in the extended window.
+
+**Exit-reason breakdown (27 trades, full 30-day window):**
+
+| Exit reason | Trades | Total PnL | Avg PnL |
+|---|---:|---:|---:|
+| EOD_SQUARE_OFF | 20 | +62,900 | +3,145 |
+| STOP_HIT | 6 | -67,950 | -11,325 |
+| TARGET_HIT | 1 | +14,700 | +14,700 |
+
+**Read: EOD_SQUARE_OFF and TARGET_HIT trades are strongly profitable on
+average; STOP_HIT trades are what's dragging the whole thing down to
+barely-positive.** The stop is placed at the FULL OPPOSITE side of the
+opening range, which on a wide-range day is a large price distance - when
+the breakout fails, the loss is correspondingly large (up to -18,600 on a
+single trade, more than triple the biggest EOD winner in the original
+10-day sample). This is the clear next lever: the entry/direction
+selection looks genuinely decent (48% win rate with winners averaging far
+more than losers on the EOD side), but the RISK MANAGEMENT (stop
+placement) is what needs tightening - not the signal itself.
+
+**Revised verdict: v1 is still net profitable at scale (+Rs9,650 / 27
+trades over 30 days, positive expectancy), but the original 10-day number
+was a favorable sample that avoided this strategy's real failure mode
+(wide-range days that fail and hit a wide stop). Do not treat the
++Rs5,600/trade figure as representative going forward - use +Rs357/trade
+(30-day) as the more honest current estimate until a tighter/ATR-based
+stop is tested.**
+
 ## Open questions for the next session (not yet resolved)
 
-- Does the 2:1 target ever get hit over a longer window, or is
-  EOD-square-off structurally the dominant exit for this stock's typical
-  daily range vs. its opening-15min range?
-- Is the +26,250 day repeatable, or does removing it flip this to a much
-  more modest (or negative) result, same as the overnight-trade pattern
-  in earlier strategies?
-- Untested: tighter RR_MULTIPLE (so trades can book profit intraday
-  instead of riding to EOD), a different/shorter opening-range window,
-  and whether ORB's edge is ASHOKLEY-specific or general across the F&O
-  universe.
+- **[RESOLVED by the 30-day re-test above]** Does the 2:1 target ever get
+  hit over a longer window, or is EOD-square-off structurally the
+  dominant exit? - EOD_SQUARE_OFF still dominates (20/27), but STOP_HIT
+  (6/27) and TARGET_HIT (1/27) both occur at scale; the target rarely
+  hits but the wide stop hits often enough to matter a lot.
+- **[RESOLVED, sample-size warning confirmed]** Is the +26,250 day
+  repeatable / representative? - No: the 10-day sample was a favorable
+  stretch; the 20 earlier days added six large STOP_HIT losses that
+  dragged the 30-day average down to +357/trade.
+- **STILL OPEN:** a tighter/ATR-based stop (instead of full opposite-
+  range-side) to cut the -11,325 average STOP_HIT loss size without
+  losing the apparently-real edge on the EOD/target side - the most
+  promising next lever per the exit-reason breakdown above.
+- **STILL OPEN:** a different/shorter opening-range window, and whether
+  ORB's edge is ASHOKLEY-specific or general across the F&O universe.
 
 ## Script inventory (all in `traderBoy` repo root, all standalone/no live impact)
 
