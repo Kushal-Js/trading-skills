@@ -107,3 +107,54 @@ investigation has throughout the day.
 `BREAKOUT_USE_WS_CANDLES` stays off until that live re-validation
 confirms the fix actually closes the gap, not just that it should in
 theory.
+
+## 23 Sep market-open attempt - confounded by 3 restarts in ~90 minutes, still no clean sample
+
+Scheduled a one-time task for 09:20 IST market open to do exactly the
+live re-validation described above (disabled once handled directly in
+the live session instead - same investigation, just done interactively
+rather than via the scheduled task).
+
+Subscribed the same 8 symbols at 09:16 IST. The droplet restarted 3
+times between 08:00-09:22 IST this morning: 08:00:01 (the known daily
+`dhanboy-morning-refresh.timer`), 08:42:14 (unexplained, clean SIGTERM -
+a deliberate restart, not a crash), and 09:21:46 (also unexplained,
+clean SIGTERM) - the last one landing MID-BAR, ~1m46s into the 09:20-
+09:25 window, wiping the WS subscription before that bar could complete.
+
+Parity check at 09:27 IST (2 bars per symbol) showed **0/8 symbols with
+an exact open match** and volume off by 79-99% on every bar - at first
+glance far WORSE than yesterday's pre-fix baseline (TCS 50%, ICICIBANK
+25%, others 75-100%). **This is NOT evidence the fix failed - both
+sampled bars are individually explainable by subscription-continuity
+gaps, unrelated to LTT-based bucketing:**
+
+- **09:15 bar**: subscribed at 09:16:07, ~1 minute after this bar's true
+  09:15:00 start. No bucketing logic, however correct, can recover a
+  bar's true open when the subscription itself didn't exist yet when
+  the bar opened - the first tick WE saw was never the market's true
+  first trade of that window.
+- **09:20 bar**: the 09:21:46 restart hit while this bar was still
+  forming, wiping the subscription; re-subscribed at ~09:24, meaning
+  the reconstructed version of this bar only reflects its LAST ~1
+  minute (09:24-09:25), not its true full 09:20-09:25 window - hence
+  the severe volume undercount and an "open" that's really just
+  whatever LTP happened to be first observed after re-subscribing, not
+  the bar's true 09:20:00 open.
+
+Both are real, inherent limits of subscribing/re-subscribing mid-bar,
+not a regression in the LTT fix itself - the fix addresses "bucket a
+tick by when the trade happened, not when we received the packet"; it
+cannot and was never meant to address "we have a genuine gap in tick
+coverage because the subscription wasn't continuous through this bar's
+whole window." Still no clean, fully-covered bar to fairly judge the
+fix on. Waiting on the current (09:25-09:30) bar, which - if no further
+restart interrupts it - would be the first bar fully covered by
+continuous subscription since the 09:24 re-subscribe, and would be a
+fair test.
+
+**Separately worth noting**: the DH-904 rate-limit pattern from
+yesterday ([[2026-09-22-swing-signal-cache-never-throttled-on-failure]])
+is already recurring this morning too (ASHOKLEY regime/Supertrend
+fetches failing at market open) - the account-wide call-budget question
+deferred yesterday is still open and appears to still be live today.
