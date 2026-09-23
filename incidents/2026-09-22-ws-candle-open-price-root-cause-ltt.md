@@ -190,3 +190,53 @@ Worth accumulating more clean bars (ideally an uninterrupted stretch of
 several, which needs the restart pattern to settle down) before treating
 this as fully confirmed, but the direction and magnitude of the result
 are a clear positive signal.
+
+## 15-minute clean monitoring window (09:29-09:44 IST) - confirmed with a real sample
+
+No restart occurred in this 15-minute window (confirmed: service uptime
+unchanged throughout, same 03:51:46 UTC start). All 8 symbols
+accumulated 5-6 bars each, giving **26 clean bars total** (every bar
+except each symbol's own confounded 09:15/09:20) - a real sample, not a
+single lucky data point.
+
+| Symbol | Clean bars | Exact open matches | Worst miss (rupees) |
+|---|---:|---:|---:|
+| RELIANCE | 3 | 2/3 | 0.2 |
+| TCS | 3 | 2/3 | 0.9 |
+| MAHABANK | 3 | 3/3 | - |
+| IDEA | 3 | 1/3 | 0.01 |
+| HDFCBANK | 3 | 3/3 | - |
+| ICICIBANK | 4 | 4/4 | - |
+| SBIN | 4 | 3/4 | 0.6 |
+| ITC | 3 | 0/3 | 0.05 (every miss identical) |
+| **Total** | **26** | **18/26 (69.2%)** | - |
+
+**69.2% exact open match on clean bars, vs 25.5% (145/568) pre-fix** -
+a real ~2.7x improvement, and every remaining miss is a fraction of a
+rupee (max 0.9), not the multi-rupee gaps seen before the fix or on
+today's own confounded bars. Volume on clean bars is similarly much
+improved (mostly within 1%, several exact) vs the 79-99% deviations on
+confounded bars.
+
+**ITC shows a small, unusually CONSISTENT miss** - exactly 0.05 rupees
+off on every one of its 3 clean bars, always in a way that doesn't
+resolve. This is a distinct pattern from the other symbols' occasional,
+inconsistent misses and might indicate something ITC-specific (tick
+granularity, a rounding quirk, or a very small residual timing lag) -
+worth a separate look, though the magnitude (~0.02% on a ~266 rupee
+stock) is far below `BREAKOUT_MIN_BODY_PCT`'s 0.5% threshold and
+unlikely to matter for real signal detection.
+
+## Verdict
+
+**The LTT fix is confirmed working** with a real, if still single-
+session, sample - not just one lucky bar. This is a genuine, large
+improvement over the pre-fix baseline, not noise. Recommend: let this
+run through a full session before treating it as fully proven, and
+separately address the restart frequency issue (3 unplanned/explained
+restarts in the first 90 min of today alone), which is an operational
+concern independent of the fix's own correctness. `BREAKOUT_USE_WS_
+CANDLES` remains off - enabling it is a deliberate decision for the
+user to make explicitly once satisfied, not an automatic consequence of
+this result, per this module's own standing "a backtest/live-check
+number alone is never itself authorization" discipline.
