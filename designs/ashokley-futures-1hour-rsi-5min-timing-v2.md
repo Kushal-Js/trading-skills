@@ -116,13 +116,57 @@ lesson as v1.
 - Same single-window caveat as every backtest in this line of work - one
   30-trading-day stretch, not a generalized/walk-forward result.
 
+## Cross-symbol test: VEDL futures (24 Sep 2026, same 30-day window, 30-min hold)
+
+Script now takes SYMBOL as a CLI arg (`symbol test_days_back
+max_hold_minutes`, was hardcoded to ASHOKLEY before) specifically to run
+this cross-symbol check.
+
+**VEDL SEP FUT, lot_size=1,150: 13 trades, 10 wins/3 losses (76.9%), net
++Rs4,945, avg +Rs380/trade.**
+
+| # | Side | Entry | Exit | RSI(1h) entry | RSI(1h) exit | PnL |
+|---|---|---|---|---:|---:|---:|
+| 1 | LONG | 08/20 10:15 | 08/20 10:45 | 58.0 | 58.0 | +862 |
+| 2 | SHORT | 08/25 14:15 | 08/25 14:45 | 50.0 | 50.0 | -1,150 |
+| 3 | LONG | 08/25 15:15 | 08/26 09:15 | 53.2 | 54.7 | +2,875 |
+| 4 | SHORT | 08/31 10:15 | 08/31 10:45 | 42.3 | 42.3 | +345 |
+| 5 | LONG | 09/04 14:15 | 09/04 14:45 | 51.6 | 51.6 | +345 |
+| 6 | SHORT | 09/07 10:15 | 09/07 10:45 | 39.8 | 39.8 | +230 |
+| 7 | LONG | 09/08 10:15 | 09/08 10:45 | 54.6 | 54.6 | -517 |
+| 8 | SHORT | 09/08 12:15 | 09/08 12:45 | 47.0 | 47.0 | +690 |
+| 9 | LONG | 09/09 10:15 | 09/09 10:45 | 50.8 | 50.8 | +575 |
+| 10 | SHORT | 09/10 12:15 | 09/10 12:45 | 48.5 | 48.5 | +920 |
+| 11 | LONG | 09/18 10:15 | 09/18 10:45 | 56.8 | 56.8 | +575 |
+| 12 | SHORT | 09/21 15:15 | 09/22 09:15 | 46.7 | 47.6 | -2,242 |
+| 13 | LONG | 09/22 10:15 | 09/22 10:45 | 58.2 | 58.2 | +1,438 |
+
+**Cross-symbol comparison (identical window, identical params):**
+
+| | Trades | Win Rate | Net P&L | Avg P&L/trade | Avg P&L/trade / lot_size (per-share edge) |
+|---|---:|---:|---:|---:|---:|
+| ASHOKLEY (lot 5,000) | 21 | 57.1% | +50,100 | +2,386 | Rs0.48/share |
+| VEDL (lot 1,150) | 13 | **76.9%** | +4,945 | +380 | Rs0.33/share |
+
+**Verdict: the strategy generalizes - net profitable on both symbols,
+with VEDL actually posting a HIGHER win rate.** But the per-share edge is
+smaller on VEDL (Rs0.33 vs Rs0.48) - ASHOKLEY's own +28,200 single trade
+inflates its average; VEDL's best trade is only +2,875. Also confirms the
+dead-code finding is not ASHOKLEY-specific: every single VEDL exit is
+ALSO `MAX_HOLD_TIME_EXIT` - RSI(14) on 1-hour didn't reach 70/30 for VEDL
+either in this window. And VEDL fires fewer signals (13 vs 21) over the
+identical 30 trading days - its 1-hour RSI crosses 50 less often.
+
 ## Open questions for the next session
 
-- Since 70/30 never fires, does a tighter exit level (e.g. 60/40) ever
-  trigger, and if so does it improve or hurt the result vs. the pure
-  time-boxed version?
+- Since 70/30 never fires (confirmed on TWO symbols now), does a tighter
+  exit level (e.g. 60/40) ever trigger, and if so does it improve or hurt
+  the result vs. the pure time-boxed version?
 - Would adding a stop-loss (currently absent) meaningfully change the
   result, or does the short (30/45min) hold already limit downside enough
   that a stop wouldn't have fired differently from what already happened?
-- Untested: whether this 1h-RSI/5min-timing pattern generalizes to other
-  F&O symbols, and whether trade #4's size is repeatable or a one-off.
+- **[PARTIALLY RESOLVED]** whether this pattern generalizes to other F&O
+  symbols - yes, at least to VEDL (see cross-symbol section above),
+  though with a smaller per-share edge. Still untested beyond these two
+  symbols, and whether ASHOKLEY trade #4's size is repeatable or a
+  one-off remains open.
