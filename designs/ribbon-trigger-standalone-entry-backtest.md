@@ -1,9 +1,10 @@
 # Design/backtest: MA-ribbon-expansion trigger as a STANDALONE entry signal
 
-**Status: backtested (25-symbol smoke test, 23 Sep 2026) — no edge found
-when fired unfiltered/standalone. Not deployed, not recommended as-is.**
-See "Next steps" below before spending more effort here without first
-addressing the false-positive-rate problem this run surfaced.
+**Status: backtested in two rounds (25-symbol smoke test, 23 Sep 2026) —
+no edge found, and round 2's "obvious fixes" made it WORSE, not better.
+Not deployed, not recommended as-is; the negative result itself
+(monotonic — stricter filtering = worse outcomes) is the useful finding
+here.** See "Round 2" and "Next steps" below.
 
 ## Where this came from
 
@@ -97,23 +98,76 @@ proven useful in its actual, narrower live role — re-ranking within a
 pre-filtered alert batch, see [[ribbon-switch-shadow]]), it's a reason to
 distrust firing it on raw, unfiltered candles across the whole market.
 
+## Round 2 — hard compression gate + score-threshold sweep (same day, same 25 symbols)
+
+User-approved next step after round 1: add a HARD gate (a trigger event
+only counts at all if, at the trigger bar itself, `score_ribbon_expansion`
+reports a genuine expansion-off-trough — `compression` component > 0 —
+AND the tightest ribbon width in the lookback window was <= 0.7%, stricter
+than `ribbon_score.py`'s own 1.0% `FULLY_TIGHT_WIDTH_PCT`, which is only a
+soft scaling constant, not a gate), plus a sweep of `MIN_ENTRY_SCORE`
+thresholds (50/60/70/80) evaluated from the same scan (script now caches
+raw candles to disk, so the sweep costs zero extra Dhan calls — see
+`traderBoy/backtest_ribbon_trigger_standalone_entry.py`'s updated
+docstring).
+
+| Threshold | Signals | Avg return | Win rate | Stop-hit rate |
+|---|---|---|---|---|
+| Round 1 (no hard gate), score>=50 | 785 | -0.037% | 36.4% | 43.6% |
+| Round 2 (hard gate), score>=50 | 260 | -0.053% | 34.6% | 47.3% |
+| Round 2, score>=60 | 199 | -0.056% | 31.7% | 48.7% |
+| Round 2, score>=70 | 128 | -0.094% | 29.7% | 52.3% |
+| Round 2, score>=80 | 56 | **-0.207%** | **17.9%** | **57.1%** |
+
+**Both "obvious fixes" failed, and failed in an informative way.** The
+hard compression gate didn't fix the negative expectancy — at the SAME
+score bar (>=50) it's slightly worse than the unfiltered round-1 version
+(315 gate-passing events found vs the much larger unfiltered set, so the
+gate did cut volume, just not toward better quality). And raising the
+score threshold made results **monotonically worse**, not better, across
+every metric (avg return, win rate, stop-hit rate all degrade smoothly
+from 50 to 80).
+
+**Likely mechanism**: `score_ribbon_expansion`'s composite has no
+anti-chase / extension penalty (unlike `momentum_signal.py`'s separate
+`extension_score`, which explicitly penalizes a candidate that's already
+run far from its own pivot — that idea was never carried into
+`ribbon_score.py`). `fanout` and `confirmation` (50% of the weight
+combined) score HIGHEST exactly when a move is already well underway, not
+right at its start — so a high-scoring signal is more likely to be
+entering LATE, after the easy part of the move already happened and right
+as it's due to stall or mean-revert. The steadily climbing stop-hit rate
+as score rises (43.6% -> 47.3% -> 48.7% -> 52.3% -> 57.1%) is exactly the
+signature that mechanism would produce.
+
+Raw results per threshold:
+`traderBoy/backtest_ribbon_trigger_standalone_entry_results_score{50,60,70,80}.json`.
+
 ## Next steps (not yet done)
 
-- **Require a real compression gate**, not just a soft-weighted component
-  — e.g. only evaluate a candidate at all if `compression_score` (or the
-  raw tightest-ribbon-width%) cleared some real minimum, matching what
-  the user's chart actually showed (a GENUINE squeeze, not just "ribbon
-  happens to be stacked").
-- **Raise `MIN_ENTRY_SCORE`** substantially above the re-ranking-tuned 50
-  for standalone use (e.g. sweep 60/70/80 against this same 25-symbol
-  sample first — cheap, no new API calls needed, the fetched candle data
-  is reusable).
-- **Run the full ~210-symbol F&O universe** before drawing a firm
-  conclusion — 25 symbols/785 signals is a reasonable smoke-test sample
-  but not the final word.
+Round 2 already ruled out the two most obvious fixes (hard compression
+gate, higher score bar) — both tested, both made it worse, not better.
+What's left unexplored:
+
+- **Add a real extension/anti-chase penalty** to the composite score
+  (the mechanism round 2 points at) — e.g. port `momentum_signal.py`'s
+  own `extension_score` idea (penalize distance from the pivot in ATR
+  multiples) into `ribbon_score.py`, or simply require entry within N
+  bars of the trigger with no further fanout/confirmation credit for
+  bars after that. Test this specifically against the same cached
+  25-symbol data before touching anything live.
+- **Try scoring the PULLBACK moment instead of the initial breakout** —
+  `ribbon_score.py` already has a `pullback` component (does price hold
+  the fastest EMA on a dip after the breakout); an entry timed to a
+  successful pullback-hold, rather than chasing the initial trigger bar,
+  may avoid the late-entry problem round 2 surfaced without needing a new
+  scoring dimension at all.
+- **Run the full ~210-symbol F&O universe** before drawing a completely
+  firm conclusion — 25 symbols is a reasonable smoke-test sample (785→
+  260→...→56 signals across the sweep) but not the final word.
 - **Test it in its actually-intended role** — layered on top of an
   existing screener-filtered candidate list (what it already does live),
-  not as a replacement for one. This backtest deliberately tested the
+  not as a replacement for one. Both rounds here deliberately tested the
   more ambitious "can this replace a screener entirely" question first,
-  since that was the literal ask; the answer here is "not without a real
-  compression gate and a higher bar."
+  since that was the literal ask; the answer after two rounds is "no, not
+  without fixing the late-entry/chasing problem first."
