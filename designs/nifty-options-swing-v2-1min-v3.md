@@ -161,10 +161,17 @@ Full 35-trade log: `results_nifty_options_swing_v2_5min_30day.json`.
 
 Added Swing's REAL deployed NSE volume-floor gate (`Swing/trading_engine.py:
 379-406`, `Swing.config.NSE_VOLUME_FLOOR_GATE_ENABLED`/
-`NSE_VOLUME_FLOOR_RATIO_MIN`, default enabled/1.2x) - not a new
-invention, the actual production gate. vol_ratio = entry-candle volume /
-its own trailing 20-candle average volume; entries below the 1.2x floor
-are skipped, same as production. Applied on NIFTY spot's own FAST-
+`NSE_VOLUME_FLOOR_RATIO_MIN`) - not a new invention, the actual
+production gate. **CORRECTION (24 Sep 2026, caught while sweeping the
+threshold):** the ratio here was originally reported as the code's own
+fallback default, 1.2x - the ACTUAL currently-deployed value, read live
+from `.env`'s `SWING_NSE_VOLUME_FLOOR_RATIO_MIN=0.6`, is **0.6x**, not
+1.2x. Every "with volume gate" result in this section below (before the
+sweep section) was run at 0.6x, not 1.2x as originally stated - the
+numbers themselves are correct, only the reported threshold value was
+wrong. vol_ratio = entry-candle volume / its own trailing 20-candle
+average volume; entries below the 0.6x floor are skipped, same as
+production. Applied on NIFTY spot's own FAST-
 timeframe volume (matching how `trading_engine.py` reuses the
 already-computed SupertrendState's volume_ratio). Script now fetches
 volume too (`fetch_nifty_spot_with_open_cached`, cache filename bumped to
@@ -243,6 +250,61 @@ also uses the 2026-09-29 contract, several weeks from expiry for the
 earliest entries).
 
 Full 30-trade log: `results_banknifty_options_swing_v2_5min_volgate_30day.json`.
+
+## Full exit-ladder config actually used (24 Sep 2026, user question "what
+## is target and max loss we have used") - read live from Swing's real
+## config/`.env`, printed at the top of every run
+
+| Parameter | Value | Meaning |
+|---|---|---|
+| Target | +20% (`TARGET_PCT=0.20`) | Exit when premium is up 20% from entry |
+| Hard stop | -20% (`HARD_STOP_LOSS_PCT=0.20`) | Exit when premium is down 20% from entry |
+| Max loss cap | Rs4,500/trade (`MAX_LOSS_PROTECTION_RS`) | Hard rupee cap, independent of the % stop |
+| Profit protection arms | Rs3,000 unrealized profit (`PROFIT_PROTECTION_RS_OPTIONS`) | Then a giveback floor governs the exit |
+| Profit protection giveback | 2% (`PROFIT_PROTECTION_GIVEBACK_PCT_OPTIONS=0.02`) | Pullback from peak that triggers exit once armed |
+| Volume floor | 0.6x (`NSE_VOLUME_FLOOR_RATIO_MIN`) | See correction above |
+
+Identical for NIFTY and BANKNIFTY - none of these are index-specific in
+the real Swing config. Neither PROFIT_PROTECTION_HIT nor STOP_LOSS_HIT
+has appeared in ANY trade log across every run this session (NIFTY or
+BANKNIFTY, any hold time/ratio) - every real exit has been TARGET_HIT,
+SUPERTREND_REVERSAL, or MAX_LOSS_HIT only.
+
+## Volume-floor ratio sweep, both indices (24 Sep 2026, user request
+## "tune BANKNIFTY volume floor threshold and what is target/max loss...")
+## then "does 0.6 also win for Nifty?"
+
+Ratio is now a CLI arg (`test_days_back fast_interval_minutes
+index_symbol volume_floor_ratio`) - was hardcoded to
+`swing_config.NSE_VOLUME_FLOOR_RATIO_MIN`. Same 5-min fast layer, same
+30-day window, swept 0.0 (gate off) through 2.0, both indices:
+
+| Ratio | NIFTY trades | NIFTY win% | NIFTY net | NIFTY avg/trade | BANKNIFTY trades | BANKNIFTY win% | BANKNIFTY net | BANKNIFTY avg/trade |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.0 | 35 | 54.3% | +12,837 | +367 | 32 | 43.8% | +9,021 | +282 |
+| **0.6** | 32 | **59.4%** | **+14,752** | **+461** | 30 | 46.7% | **+10,339** | +345 |
+| 0.8 | 27 | 55.6% | +9,399 | +348 | 22 | 40.9% | +6,463 | +294 |
+| 1.0 | 21 | 57.1% | +8,759 | +417 | 18 | 38.9% | +5,142 | +286 |
+| 1.2 | 17 | 52.9% | +5,583 | +328 | 16 | 37.5% | +6,879 | **+430** |
+| 1.5 | 12 | 41.7% | +400 | +33 | 11 | 27.3% | +1,164 | +106 |
+| 2.0 | 8 | 37.5% | -1,427 | -178 | 4 | 25.0% | -361 | -90 |
+
+**NIFTY: 0.6 is a clean, unambiguous peak** - best win rate, best total,
+best avg/trade, all simultaneously, degrading close to monotonically
+above it (small dip-and-recover at 1.0 aside) down to negative by 2.0.
+
+**BANKNIFTY: messier** - 0.6 wins on total P&L (best of the sweep) but
+1.2 wins on avg/trade (+430 vs 0.6's +345), with a noisy dip at 0.8-1.0
+in between (likely small-sample noise, 11-22 trades per cell, not a real
+signal). Both ends (0.0 and 2.0+) are clearly worse/negative.
+
+**Verdict, since the real deployed gate is a SINGLE shared ratio across
+both indices, not per-index config**: 0.6 (the current live value) is
+the right choice. It's the true optimum for NIFTY, and for BANKNIFTY
+it's still 2nd-best on avg/trade and BEST on total P&L - switching to
+1.2 would cost NIFTY a 29% per-trade haircut (+461 -> +328) to gain
+BANKNIFTY a smaller improvement. No case found here for changing the
+live default.
 
 ## Open questions for the next session
 
