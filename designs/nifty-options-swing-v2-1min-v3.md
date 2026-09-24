@@ -156,6 +156,50 @@ periods -> more trades -> worse results, see
 
 Full 35-trade log: `results_nifty_options_swing_v2_5min_30day.json`.
 
+## Volume-floor gate added (24 Sep 2026, user follow-up: "use it with
+## volume floor gate condition also") - further improvement on the 5-min layer
+
+Added Swing's REAL deployed NSE volume-floor gate (`Swing/trading_engine.py:
+379-406`, `Swing.config.NSE_VOLUME_FLOOR_GATE_ENABLED`/
+`NSE_VOLUME_FLOOR_RATIO_MIN`, default enabled/1.2x) - not a new
+invention, the actual production gate. vol_ratio = entry-candle volume /
+its own trailing 20-candle average volume; entries below the 1.2x floor
+are skipped, same as production. Applied on NIFTY spot's own FAST-
+timeframe volume (matching how `trading_engine.py` reuses the
+already-computed SupertrendState's volume_ratio). Script now fetches
+volume too (`fetch_nifty_spot_with_open_cached`, cache filename bumped to
+`_VOL` to avoid loading stale pre-volume cached files).
+
+Same 5-min fast layer, same 30-day window (2026-08-12 to 2026-09-23):
+
+| | No volume gate | With volume gate |
+|---|---:|---:|
+| Trades (closed) | 35 | 32 |
+| Win rate | 54.3% | **59.4%** |
+| Net P&L | +12,837 | **+14,752** |
+| Avg P&L/trade | +367 | **+461** |
+
+8 entries were blocked by the gate (e.g. `2026-09-21 15:25` at
+0.001x - essentially zero volume vs. its own recent average). All three
+metrics improved - the gate specifically removed weak-liquidity entries
+that were going to be reversal-losses anyway, without blocking any of
+the 10 target-hit winners:
+
+| Exit reason | Trades | Total PnL | Avg PnL |
+|---|---:|---:|---:|
+| TARGET_HIT | 10 | +28,944 | +2,894 |
+| SUPERTREND_REVERSAL | 21 (was 24) | -9,640 (was -11,554) | -459 |
+| MAX_LOSS_HIT | 1 | -4,553 | -4,553 |
+
+**Running tally of what's improved v3 so far**: moving fast-layer 1min ->
+5min (avg/trade +28 -> +367, 13x), then adding the volume-floor gate
+(+367 -> +461, another +26%). Both changes worked in the same direction -
+fewer, higher-quality entries beats more, noisier ones, consistent with
+this session's broader finding (shorter EMA periods on ASHOKLEY also
+made results worse, see [[ashokley-futures-strategy-exploration-orb-v1]]).
+
+Full 32-trade log: `results_nifty_options_swing_v2_5min_volgate_30day.json`.
+
 ## Open questions for the next session
 
 - Whether restricting to the cleanly-resolved 08/24-onward window (22
