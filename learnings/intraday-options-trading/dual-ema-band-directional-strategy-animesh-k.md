@@ -120,3 +120,56 @@ against our own price data. If this gets backtested against DhanBoy's
 historical feeds, log the result as a new file here (or update this one)
 citing the actual numbers — don't overwrite this summary with a verdict
 without evidence attached.
+
+## Backtest result (30 trading days, 2026-08-13 to 2026-09-24)
+
+Run via `traderBoy/backtest_dual_ema_band_nifty_30day.py` (not committed —
+ad-hoc script, same pattern as the repo's other untracked `backtest_*.py`
+files). Tests the mechanical entry/exit rule only, on the **NIFTY 50 index
+underlying** (not options), reported in index points — the sector/stock
+selection layer and real ATM premium P&L are NOT modeled (see "not
+modeled" above; both are still open). Auth used a hand-off access token
+(`access_token` mode), never local `pin_totp`, to avoid the exact session
+collision documented in incidents/2026-09-21-local-backtest-dhan-session-
+collision.md.
+
+Continuous daily + intraday series (34-EMA on Heikin-Ashi High/Low,
+computed over the full fetched range before slicing to the test window —
+[[feedback-continuous-candles]]). Exit modeled: HA-close crosses back
+through the *opposite* band edge, OR forced square-off at the last bar of
+the entry day if no such cross happens intraday (this second case — no
+reversal signal all session — is scored using the actual last-seen price,
+not dropped from the stats; an earlier draft of this script wrongly
+excluded these as "unresolved," which silently threw out 30-63% of trades
+including the video's own claimed best case, the full-session trend hold —
+caught and fixed before trusting any number below).
+
+Both untested intraday timeframes swept, since the video never states one:
+
+| Interval | Trades | Win rate | Avg win | Avg loss | Net (index pts) |
+|---|---|---|---|---|---|
+| 5-min  | 52 | 42.3% (22W/30L) | +50.4 | -27.3 | **+291.0** |
+| 15-min | 27 | 48.1% (13W/14L) | +66.1 | -51.4 | **+139.9** |
+
+Both intervals net positive over this specific 30-day window, and in both
+cases the P&L is carried almost entirely by the `SESSION_END_SQUARE_OFF`
+trades (positions that never got a reverse-band signal and held the full
+session) — 5-min: 16 such trades, net **+707.6** pts (avg +44.2), vs. the
+band-flip exits (both directions combined) netting **-416.6** pts across
+36 trades. 15-min: 17 such trades net **+787.5** pts vs. band-flip exits
+net **-647.6** pts across 10 trades. This matches the video's own framing
+almost exactly — most individual signals are small losses ("cost of doing
+business"), and the edge (if real) comes entirely from the minority of
+trades that catch a full-session trend and are held to the close.
+
+**Caveats before reading too much into the positive number**: one 30-day
+window, one instrument, no slippage/spread/brokerage modeled, no real
+option premium/theta (index points ≠ rupee P&L), and — most importantly —
+both intervals' results are dominated by a handful of large trend days
+(worst single trade -79.8 to -149.3 pts, best single trade +214 to +248.2
+pts, both concentrated around 2026-09-11 and 2026-09-15) rather than a
+broad, repeatable edge across most trades. A longer window and/or a
+different 30-day slice could easily flip the sign. Full trade-by-trade
+JSON: `/tmp/dual_ema_band_backtest_cache/results_dual_ema_band_nifty_30day.json`
+on the machine the backtest was run from (not synced anywhere — regenerate
+by rerunning the script if needed).
