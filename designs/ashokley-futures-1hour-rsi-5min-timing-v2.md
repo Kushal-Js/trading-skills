@@ -157,16 +157,74 @@ ALSO `MAX_HOLD_TIME_EXIT` - RSI(14) on 1-hour didn't reach 70/30 for VEDL
 either in this window. And VEDL fires fewer signals (13 vs 21) over the
 identical 30 trading days - its 1-hour RSI crosses 50 less often.
 
+## Multi-symbol x multi-holdtime sweep (24 Sep 2026, user request: "run v2
+## against few FnO using timeframes 30/45/60 mins")
+
+Same 30-day window (2026-08-12 to 09-23) for every cell. Added
+TATASTEEL, SBIN, HDFCBANK to the ASHOKLEY/VEDL pair already tested, and
+filled in VEDL's missing 45/60min runs.
+
+| Symbol | Hold | Trades | Win Rate | Net P&L | Avg/trade | Per-share edge |
+|---|---:|---:|---:|---:|---:|---:|
+| ASHOKLEY (lot 5,000) | 30 | 21 | 57.1% | +50,100 | +2,386 | +Rs0.477 |
+| ASHOKLEY | 45 | 21 | 61.9% | +45,450 | +2,164 | +Rs0.433 |
+| ASHOKLEY | 60 | 21 | 47.6% | +28,850 | +1,374 | +Rs0.275 |
+| VEDL (lot 1,150) | 30 | 13 | 76.9% | +4,945 | +380 | +Rs0.330 |
+| VEDL | 45 | 13 | 53.8% | +3,393 | +261 | +Rs0.227 |
+| VEDL | 60 | 13 | 46.2% | +5,980 | +460 | +Rs0.400 |
+| **TATASTEEL (lot 2,750)** | 30 | 33 | 42.4% | **-2,502** | -76 | -Rs0.028 |
+| **TATASTEEL** | 45 | 33 | 39.4% | **-3,685** | -112 | -Rs0.041 |
+| **TATASTEEL** | 60 | 33 | 36.4% | **-12,100** | -367 | -Rs0.133 |
+| SBIN (lot 750) | 30 | 17 | 58.8% | +4,500 | +265 | +Rs0.353 |
+| SBIN | 45 | 17 | 58.8% | +3,900 | +229 | +Rs0.305 |
+| **SBIN** | 60 | 17 | 41.2% | **-8,025** | -472 | -Rs0.629 |
+| HDFCBANK (lot 650) | 30 | 17 | 64.7% | +2,665 | +157 | +Rs0.242 |
+| HDFCBANK | 45 | 17 | 58.8% | +5,785 | +340 | +Rs0.523 |
+| **HDFCBANK** | 60 | 17 | 58.8% | **+8,808** | +518 | **+Rs0.797 (best of all 15 cells)** |
+
+**Three findings that materially change the picture from the two-symbol
+version of this section:**
+
+1. **No universal best hold time - it's symbol-specific.** ASHOKLEY and
+   SBIN both prefer 30min and degrade as hold time increases (SBIN flips
+   net NEGATIVE at 60min). HDFCBANK does the OPPOSITE - monotonically
+   IMPROVES from 30 to 45 to 60min, and its 60min per-share edge
+   (+Rs0.797) is the best result in the entire 15-cell matrix, beating
+   even ASHOKLEY's best. VEDL is non-monotonic (dips at 45, recovers at
+   60). A single fixed MAX_HOLD_MINUTES tuned on ASHOKLEY does NOT
+   transfer as "the right value" to every symbol.
+2. **TATASTEEL breaks the "v2 generalizes" claim from the two-symbol
+   version of this doc.** Net negative at ALL THREE hold times, and
+   monotonically worse the longer it's held (-76 -> -112 -> -367/trade).
+   This is the first symbol where v2 fails outright rather than just
+   underperforming - should be EXCLUDED from any deployment of this
+   strategy, not parameter-tuned into profitability.
+3. **SBIN's 60min collapse (+265/trade at 30min -> -472/trade at 60min)
+   is the sharpest single reversal in the matrix** - direct evidence
+   against "longer hold = safer"; for some symbols it's the opposite.
+
+**Practical implication for any future live use:** v2 works on 4 of 5
+symbols tested here, but the profitable hold time isn't a fixed constant
+across symbols - it would need per-symbol tuning, which is a real
+weakness for a rule meant to run identically across a watchlist. Treat
+"v2 with a single global MAX_HOLD_MINUTES" as unproven at watchlist scale
+until this is investigated further (see open questions).
+
 ## Open questions for the next session
 
-- Since 70/30 never fires (confirmed on TWO symbols now), does a tighter
-  exit level (e.g. 60/40) ever trigger, and if so does it improve or hurt
-  the result vs. the pure time-boxed version?
+- Since 70/30 never fires (confirmed on ASHOKLEY and VEDL), does a
+  tighter exit level (e.g. 60/40) ever trigger, and if so does it improve
+  or hurt the result vs. the pure time-boxed version? Still untested on
+  TATASTEEL/SBIN/HDFCBANK too.
 - Would adding a stop-loss (currently absent) meaningfully change the
   result, or does the short (30/45min) hold already limit downside enough
   that a stop wouldn't have fired differently from what already happened?
-- **[PARTIALLY RESOLVED]** whether this pattern generalizes to other F&O
-  symbols - yes, at least to VEDL (see cross-symbol section above),
-  though with a smaller per-share edge. Still untested beyond these two
-  symbols, and whether ASHOKLEY trade #4's size is repeatable or a
-  one-off remains open.
+  Particularly relevant for SBIN's 60min collapse and TATASTEEL's losses.
+- **[RESOLVED, negatively]** whether a single global hold time is the
+  right design - no, it isn't; see the multi-symbol sweep above. Worth
+  investigating WHY HDFCBANK prefers long holds while ASHOKLEY/SBIN
+  prefer short ones (volatility regime? trend persistence? needs its own
+  investigation, not guessed at here).
+- Whether TATASTEEL's failure is specific to this window or a durable
+  property of the symbol/strategy combination - only one 30-day sample
+  tested so far, same standing caveat as everything else in this repo.
