@@ -116,6 +116,46 @@ its total trade count is affected by this distortion. Treat this result
 as a directional signal at best, not a real economic estimate of what
 weekly-options scalping on this rule would actually produce.
 
+## 5-min fast layer re-test (24 Sep 2026, user follow-up: "run it again but
+## for 5 min candles now") - a MUCH better result than the 1-min version
+
+Script now takes `test_days_back fast_interval_minutes` as CLI args (was
+hardcoded to 1min) - same script, `backtest_nifty_options_swing_v2_1min.py`.
+SLOW stays 15min in both runs (the user only ever asked to move the fast
+layer). Same 30-day window (2026-08-12 to 2026-09-23).
+
+**36 trades (22 skipped, far fewer than 1min's 96 - this fires much less
+often), 35 closed + 1 open, 19 wins/16 losses (54.3%), net +Rs12,837, avg
++Rs367/trade.**
+
+| | 1-min fast layer | 5-min fast layer |
+|---|---:|---:|
+| Trades (resolved) | 139 | 35 |
+| Skipped (expiry ceiling) | 96 | 22 |
+| Win rate | 36.0% | **54.3%** |
+| Net P&L | +3,929 | **+12,837** |
+| Avg P&L/trade | +28 | **+367 (13x better)** |
+
+**Exit-reason breakdown (5min run):**
+
+| Exit reason | Trades | Total PnL | Avg PnL |
+|---|---:|---:|---:|
+| TARGET_HIT | 10 | +28,944 | +2,894 |
+| SUPERTREND_REVERSAL | 24 | -11,554 | -481 |
+| MAX_LOSS_HIT | 1 | -4,553 | -4,553 |
+
+Same structural pattern as 1min (survives on target-hits, bleeds on
+Supertrend-reversal exits) but a much healthier ratio: 10 target-hits vs
+24 reversal-losses (was 16 vs 122 at 1min). **Moving the fast layer from
+1min to 5min cut trade count by ~75% and multiplied average profit per
+trade by ~13x** - strong evidence that the 1min version's extra signal
+frequency was mostly noise, not edge. This mirrors a pattern already seen
+elsewhere this session (the ASHOKLEY triple-EMA sweep also found shorter
+periods -> more trades -> worse results, see
+[[ashokley-futures-strategy-exploration-orb-v1]]'s comparison table).
+
+Full 35-trade log: `results_nifty_options_swing_v2_5min_30day.json`.
+
 ## Open questions for the next session
 
 - Whether restricting to the cleanly-resolved 08/24-onward window (22
