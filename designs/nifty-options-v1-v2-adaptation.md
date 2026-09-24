@@ -1,5 +1,11 @@
 # v1 (ORB) and v2 (1h RSI/5min timing) adapted to NIFTY-50 INDEX OPTIONS (24 Sep 2026, user request)
 
+**UPDATE:** a third strategy, Swing's real deployed v2-combined entry
+logic on a 1-min fast layer, was named **v3** and also adapted to NIFTY
+options - see [[nifty-options-swing-v2-1min-v3]]. It hits the same
+expiry-ceiling constraint described below, more severely (96 of ~236
+signals skipped, vs. 2-5 for v1/v2's own runs).
+
 **Status: exploratory backtesting only - nothing here is deployed live.**
 Neither script touches any live package; both are standalone backtests in
 `traderBoy` (repo root), paper/simulation only, no real orders placed.
