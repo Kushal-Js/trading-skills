@@ -173,3 +173,53 @@ different 30-day slice could easily flip the sign. Full trade-by-trade
 JSON: `/tmp/dual_ema_band_backtest_cache/results_dual_ema_band_nifty_30day.json`
 on the machine the backtest was run from (not synced anywhere — regenerate
 by rerunning the script if needed).
+
+## Rupee P&L estimate (Black-Scholes, NOT real quoted premiums)
+
+User asked to convert the above into real money. Attempted real ATM option
+premiums first and hit a hard, confirmed platform constraint: Dhan's
+instrument master only lists currently-listed contracts - every NIFTY
+weekly option covering this 30-day window (2026-08-13..2026-09-24) has
+since expired and been delisted, so its historical premium candles are
+permanently unfetchable (earliest listed expiry checked live: 2026-09-29).
+Same constraint `nifty_options_bt_common.py` already documents for a
+different backtest. User chose (asked explicitly) a Black-Scholes estimate
+over shrinking the window to the ~1-2 days that would still be fetchable.
+
+Method (`backtest_dual_ema_band_nifty_30day_rupee_pnl.py`, not committed):
+theoretical ATM CE (LONG trades) / ATM PE (SHORT trades) repriced at each
+trade's real entry/exit timestamp using the REAL (non-HA) NIFTY spot from
+the already-cached raw series, ATM strike = spot rounded to the nearest
+real 50-point step, T = calendar time to the next Tuesday on/after the
+trade date (NIFTY's current weekly expiry day - approximates the
+historical cycle, does NOT account for holiday-shifted expiries), sigma =
+that day's REAL India VIX daily close (security_id 21) as the ATM IV
+proxy, r = fixed 6.5% p.a. Lot size used: NIFTY's **current live lot size,
+65** (looked up fresh from the instrument master at run time - assumed
+unchanged across the 6-week window; NSE does periodically revise index lot
+sizes, so if it actually changed mid-window the rupee figures below scale
+linearly with whatever the true lot size was on each trade's date).
+
+| Interval | Trades | Win rate | Avg win | Avg loss | Net (Rs, per lot) |
+|---|---|---|---|---|---|
+| 5-min  | 52 | 28.8% (15W/37L) | +2,791 | -913 | **+8,085** |
+| 15-min | 27 | 37.0% (10W/17L) | +3,200 | -1,734 | **+2,522** |
+
+Notable shift vs. the index-points table above: **win rate drops sharply
+in rupee terms** (42.3%→28.8% on 5-min, 48.1%→37.0% on 15-min) while net
+P&L stays positive - consistent with buying options rather than trading
+the index directly: theta/vega erode small/flat moves faster than the
+index-point P&L shows, while the few big trend trades gain convexity (best
+trade Rs +16,086 on 5-min vs. worst Rs -2,576) that a linear index-point
+measure understates. This is the same "most trades are small losses, the
+edge is a minority of big winners" pattern Animesh describes on air,
+sharpened by real option convexity.
+
+**This is a theoretical repricing, not a backtest against real quotes** -
+treat it as a plausibility check on magnitude/shape (does the edge survive
+option convexity and decay at all), not as a number to size real capital
+against. Real slippage, bid-ask spread, and actual historical IV (which
+can differ meaningfully from the VIX proxy, especially around events) are
+all unmodeled. Full priced trade log:
+`/tmp/dual_ema_band_backtest_cache/results_dual_ema_band_nifty_30day_rupee_pnl.json`
+(not synced anywhere - regenerate by rerunning both scripts in sequence).
