@@ -420,3 +420,63 @@ See `tests/test_risk_threshold_cutoff.py` (tests 4-6) for the disable
 behavior and its scoping to MAX_LOSS_HIT only, and `tests/
 test_luxury_corrective_actions.py` (test 17) for Luxury's own
 EMA-cross wiring check.
+
+## The stepped/"ratchet" dynamic SL is currently DEAD CODE in all three packages - found 24 Sep 2026
+
+User question: "do we have a trailing SL mechanism for Luxury/Options/
+Futures, and is it reachable?" Answer: there IS a working mechanism
+(`Position.current_trailing_sl`, `Options/position_store.py:158`, reused
+verbatim by Futures/Luxury), with two independently-toggleable layers -
+a continuous trail (`ENABLE_TRAILING_SL`/`TRAILING_SL_PCT`) and a stepped
+ratchet (`ENABLE_DYNAMIC_SL`/`DYNAMIC_SL_STEP_PCT_CE`/`_PE`/
+`DYNAMIC_SL_INCREASE_PCT`). Checked live `.env` (not just code defaults,
+per this repo's own standing rule) for all three packages, confirmed
+identical on the droplet:
+
+- `ENABLE_TRAILING_SL=false` everywhere (Options explicit, Futures/Luxury
+  fall back to their own code default of `false`) - the continuous trail
+  is off across the board, only the ratchet is nominally active.
+- `ENABLE_DYNAMIC_SL=true` everywhere, but `DYNAMIC_SL_STEP_PCT_CE` /
+  `_PE` = **0.20 (20%)** for all three - NOT the 7%/9% values the code's
+  own comments describe as backtested-and-intentional (Options/Futures
+  config.py's own docstrings cite 7% CE / 7-9% PE as the tuned values;
+  live `.env` overrides both to 20% for every package).
+- `TARGET_PCT` (and `STOP_LOSS_PCT`) are ALSO 0.20 (20%) for all three,
+  live.
+
+**The problem: `DYNAMIC_SL_STEP_PCT` == `TARGET_PCT`, both exactly 20%,
+and `_exit_reason_for`'s priority ladder checks `TARGET_HIT` (line ~1447)
+strictly before `current_trailing_sl`/`TRAILING_SL_HIT` (line ~1453) -
+same function, same tick, same order in Options/Futures/Luxury's
+`trading_engine.py` alike.** The ratchet's first step only "completes"
+once `highest_price` has risen 20% off entry - the EXACT SAME threshold
+at which `ltp >= position.target_price` (`entry_price * (1 +
+TARGET_PCT)` = `entry_price * 1.20`) already fires and returns
+`TARGET_HIT`, closing the position before the trailing-SL check is ever
+reached on that tick or any later one (position is already closed).
+Confirmed `ENABLE_TARGET_EXIT=true` live for all three (the code comment
+mentioning `FUTURES_ENABLE_TARGET_EXIT=false` as a past state is now
+stale - it's genuinely `true` in the current `.env`, another instance of
+"don't trust the comment, check `.env`").
+
+**Consequence: with the current live config, the ratchet cannot raise the
+stop-loss floor even once, in any package, for any trade.** It's not a
+bug in the code - `current_trailing_sl`'s logic is correct and the
+mechanism works exactly as designed if you disable target-exit or widen
+the gap between step % and target % - it's a **config collision**: two
+independently-tunable percentages that happen to have been set to the
+identical value, silently making one of them (the ratchet) unreachable
+given the other's higher priority. The continuous trail
+(`ENABLE_TRAILING_SL`) is separately off anyway, so right now **no
+trailing mechanism of any kind can ever engage before a winning trade
+either hits the fixed 20% target or gives back to the fixed hard stop -
+a position's exit floor never actually moves during its lifetime.**
+
+**Not fixed here** - this is a live production config affecting real
+money, so it goes through [[feedback-live-trading-safety]]'s
+confirm-before-touching-live-config checklist, not an autonomous edit.
+The fix is narrow either way: lower `DYNAMIC_SL_STEP_PCT_CE`/`_PE` (and/or
+`FUTURES_`/`LUXURY_` equivalents) below `TARGET_PCT` so at least one step
+can complete before target, or accept that at 20%/20% the ratchet is
+pure dead weight and could be disabled (`ENABLE_DYNAMIC_SL=false`)
+without changing live behavior at all right now.
