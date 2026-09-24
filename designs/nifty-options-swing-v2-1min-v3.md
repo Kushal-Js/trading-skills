@@ -200,6 +200,50 @@ made results worse, see [[ashokley-futures-strategy-exploration-orb-v1]]).
 
 Full 32-trade log: `results_nifty_options_swing_v2_5min_volgate_30day.json`.
 
+## Cross-index test: BANKNIFTY options (24 Sep 2026, user follow-up: "try
+## it for BankNifty option scalping also")
+
+`nifty_options_bt_common.py`'s `resolve_nifty_atm_option` now takes a
+`symbol_prefix` param (default `"NIFTY-"`, backward-compatible) instead
+of hardcoding it; the main script's `INDEX_SYMBOL` is a CLI arg (`test_
+days_back fast_interval_minutes index_symbol`, default 30/1/NIFTY) mapped
+to the real security_id/prefix confirmed live against
+`dhan_wrapper.instruments()`: NIFTY security_id=13/lot=65, BANKNIFTY
+security_id=25/lot=30 (BANKNIFTY moved to monthly-only expiry per NSE's
+2024 rationalization - not weekly like NIFTY - though the "nearest
+expiry" resolver logic needed no change for that).
+
+Same 5-min fast layer + volume-floor gate, same 30-day window:
+
+**BANKNIFTY: 30 closed trades + 1 open (9 skipped - expiry ceiling, 8
+blocked - volume gate), 14 wins/16 losses (46.7%), net +Rs10,339, avg
++Rs345/trade.**
+
+| Exit reason | Trades | Total PnL | Avg PnL |
+|---|---:|---:|---:|
+| TARGET_HIT | 9 | +33,519 | +3,724 |
+| SUPERTREND_REVERSAL | 21 | -23,180 | -1,104 |
+
+**Cross-index comparison (identical config/window):**
+
+| | Trades | Win Rate | Net P&L | Avg P&L/trade |
+|---|---:|---:|---:|---:|
+| NIFTY | 32 | **59.4%** | **+14,752** | **+461** |
+| BANKNIFTY | 30 | 46.7% | +10,339 | +345 |
+
+**Verdict: the rule generalizes to BANKNIFTY (also net profitable, same
+survives-on-target-hits pattern) but NIFTY performs meaningfully better
+on every metric.** No MAX_LOSS_HIT on this BANKNIFTY run (NIFTY had one,
+-4,553), but BANKNIFTY's average SUPERTREND_REVERSAL loss is much larger
+(-1,104 vs -459) - BANKNIFTY's absolute point-moves and premiums are
+bigger (higher-priced index) even though its lot size (30) is smaller
+than NIFTY's (65), so a whipsaw costs more per trade despite the smaller
+lot. Same wrong-expiry-cycle caveat applies (every BANKNIFTY trade here
+also uses the 2026-09-29 contract, several weeks from expiry for the
+earliest entries).
+
+Full 30-trade log: `results_banknifty_options_swing_v2_5min_volgate_30day.json`.
+
 ## Open questions for the next session
 
 - Whether restricting to the cleanly-resolved 08/24-onward window (22
