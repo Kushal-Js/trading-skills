@@ -67,12 +67,23 @@ entry-trigger/exit-reversal Supertrend reads 1-min candles instead of
 by reading `Swing/signals.py` (`get_supertrend_state(symbol)` with no
 explicit interval reads this default) and `Swing/trading_engine.py`
 (`_evaluate_entry_signal`): this knob **only** changes the entry-trigger/
-exit-reversal Supertrend (and the index-only Day Range branch's own
-Supertrend, not exercised for SONACOMS). It does NOT touch the 15-min
-filter-leg Supertrend (`get_supertrend_state(symbol, 15)` passes its
-interval explicitly) or the regime EMA200 5m/15m reading - those stay
-exactly as before. So this change only affects which candle grid the
-crossed_above/crossed_below edge (the actual trigger) is read from.
+exit-reversal Supertrend (and the Day Range branch's own Supertrend). It
+does NOT touch the 15-min filter-leg Supertrend (`get_supertrend_state(
+symbol, 15)` passes its interval explicitly) or the regime EMA200 5m/15m
+reading - those stay exactly as before.
+
+**IMPORTANT CORRECTION (see the PAYTM/VEDL/ASHOKLEY entry below):** this
+SONACOMS run's Day Range branch B was hardcoded OFF, on the (WRONG, as of
+this run) assumption that Day Range only fires for `config.INDEX_SYMBOLS`
+(NIFTY/BANKNIFTY). `Swing/signals.py`'s own module comment says Day Range
+was "promoted to the default for every Swing symbol" on 24 Sep 2026, and
+`Swing/trading_engine.py`'s `_evaluate_entry_signal` confirms it: `day_
+range = await signals.get_day_range_state(symbol)` runs unconditionally
+for every non-COPPER symbol. So this SONACOMS result below is NOT a fully
+byte-accurate port of production - branch B was never exercised here.
+Given SONACOMS's regime/filter conditions this window, it's plausible but
+not confirmed that including it wouldn't have changed the trade list.
+Treat the number below as directionally informative, not exact.
 
 **Method:** `traderBoy/backtest_sonacoms_supertrend_1min_vs_5min_30day.py`
 - forked from the period/multiplier comparison script, reusing its cached
@@ -105,12 +116,13 @@ dup-order guard and MCX/NSE volume-floor gate far more than the current
 setting ever does in practice - worth a live-shadow/paper-trade check
 before treating this as deployable, not just a clean backtest number.
 
-**Scope:** same single-symbol, single-window caveats as the entry above.
+**Scope:** same single-symbol, single-window caveats as the entry above,
+PLUS the Day Range omission noted above - **superseded in direction by the
+PAYTM/VEDL/ASHOKLEY result below, which found v4 net NEGATIVE using the
+methodology that correctly includes Day Range.** SONACOMS alone is not
+representative - see that entry for the full picture.
 
-**Outcome:** not deployed - user asked for the comparison only. Given the
-6x trade-frequency increase and the unmodeled execution-cost caveat above,
-this number should NOT be read as "switch to 1-min Supertrend" without a
-paper-trade/shadow validation first.
+**Outcome:** not deployed - user asked for the comparison only.
 
 **Update 25 Sep 2026 (same session) - named "v4" in code, NOT deployed:**
 this feature set is now `Swing/config.py`'s `ENTRY_STRATEGY_VERSION="v4"`
@@ -135,3 +147,90 @@ Fixing this for real means changing `candle_feed.py`'s base bucket from
 change since EVERY Swing signal (regime EMA, both Supertrends, Day Range)
 derives from that same feed, not just v4's. Flagged to the user; not done
 without explicit go-ahead given the blast radius.
+
+## v3 vs v4 (1-min Supertrend/Day Range), Day-Range-correct methodology - PAYTM, VEDL, ASHOKLEY, 30-day
+
+**Date:** 25 Sep 2026 (same session, direct follow-up - this is the
+methodologically-correct multi-symbol re-run the SONACOMS entry above was
+missing)
+**Symbols:** PAYTM, VEDL, ASHOKLEY - all plain NSE equity F&O, OPTIONS
+basket, not MCX/index
+**Window:** last 30 trading days (2026-08-14 to 2026-09-25, per-symbol
+exact range varies slightly with each one's own trading calendar)
+
+**Method:** `traderBoy/backtest_v3_vs_v4_paytm_vedl_ashokley_30day.py` -
+forked from `backtest_swing_v3_multi_symbol_30day.py` (the SOLARINDS/VEDL
+script that already correctly includes Day Range branch B for ordinary
+equities), extended to run BOTH v3 (5-min Supertrend + Day Range, i.e.
+today's live default) and v4 (1-min Supertrend + Day Range) per symbol.
+Confirmed via `Swing/signals.py`'s `_fetch_day_range_state_once` that Day
+Range's own Supertrend/RSI/open-close comparison all read `config.
+SUPERTREND_INTERVAL_MINUTES` too - so v4 changes BOTH branch A (Supertrend
+cross) and branch B (Day Range) simultaneously, not just branch A. The
+15-min filter leg and 5m/15m regime EMA are unaffected in both variants
+(unchanged from every prior entry in this file).
+
+**Result - day-wise, per symbol:**
+
+PAYTM:
+| Date | v3 (trades/W/L/net/running) | v4 (trades/W/L/net/running) |
+|---|---|---|
+| 08-28 | -- | 2/0/2/-2,900/-2,900 |
+| 08-31 | 1/1/0/+2,030/+2,030 | -- |
+| 09-02 | -- | 1/0/1/-689/-3,589 |
+| 09-03 | 1/1/0/+435/+2,465 | -- |
+| 09-04 | -- | 1/0/1/-3,988/-7,576 |
+| 09-08 | 1/1/0/+3,299/+5,764 | -- |
+| 09-25 | 1/1/0/+5,474/+11,238 | 1/0/1/-2,827/-10,404 |
+| **TOTAL** | **4 trades, 4W/0L, +Rs 11,238** | **5 trades, 0W/5L, -Rs 10,404** |
+
+VEDL:
+| Date | v3 | v4 |
+|---|---|---|
+| 08-28 | 1/1/0/+2,760/+2,760 | 1/1/0/+920/+920 |
+| 09-02 | 1/1/0/+920/+3,680 | 1/1/0/+230/+1,150 |
+| 09-23 | 1/0/1/-978/+2,702 | 1/0/1/-345/+805 |
+| **TOTAL** | **3 trades, 2W/1L, +Rs 2,702** | **3 trades, 2W/1L, +Rs 805** |
+
+ASHOKLEY:
+| Date | v3 | v4 |
+|---|---|---|
+| 08-28 | -- | 3/1/2/+250/+250 |
+| 08-31 | 1/1/0/+3,100/+3,100 | -- |
+| 09-01 | -- | 1/1/0/+2,150/+2,400 |
+| 09-02 | 1/1/0/+1,200/+4,300 | -- |
+| **TOTAL** | **2 trades, 2W/0L, +Rs 4,300** | **4 trades, 2W/2L, +Rs 2,400** |
+
+**Combined:**
+
+| Variant | Trades | Wins | Losses | Net P&L |
+|---|---|---|---|---|
+| v3 (5-min ST/Day Range) | 9 | 8 | 1 | **+Rs 18,240** |
+| v4 (1-min ST/Day Range) | 12 | 4 | 8 | **-Rs 7,199** |
+
+Delta: **-Rs 25,439** - v4 loses money where v3 profits handsomely, the
+OPPOSITE conclusion from the SONACOMS-only result above. PAYTM is the
+worst case: v4 went 0-for-5.
+
+**Why this contradicts the SONACOMS result:** two real, compounding
+differences from the earlier (incomplete) SONACOMS run: (1) this run
+correctly includes Day Range branch B, which SONACOMS's did not, and
+Day Range's own signal quality is itself timeframe-sensitive - a 1-min
+RSI(14)/Supertrend read on Day Range is a much noisier read than a 5-min
+one, plausibly degrading branch B entries specifically; (2) different
+symbols behave differently under a tighter Supertrend - SONACOMS happened
+to have a favorable win/loss SIZE ratio at 1-min resolution that
+outweighed its lower hit rate, but that is not a universal property of
+tightening the entry timeframe, as PAYTM/VEDL/ASHOKLEY show plainly here.
+
+**Conclusion so far across all v4 backtests in this file:** v4 (1-min
+Supertrend/Day Range) is NOT a broadly better setting. It won on SONACOMS
+alone (missing Day Range) and lost clearly across PAYTM/VEDL/ASHOKLEY
+(Day Range included, methodologically correct). The SONACOMS result
+should NOT be generalized - if anything, this set of runs is evidence
+AGAINST switching the live watchlist to v4, not for it.
+
+**Outcome:** not deployed. Live `.env` remains `SWING_ENTRY_STRATEGY_
+VERSION=v2`. v4 also still has the live-feed gap noted above (candle_
+feed.py can't serve 1-min bars), so it isn't currently runnable live
+regardless of these backtest numbers.
