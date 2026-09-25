@@ -234,3 +234,76 @@ AGAINST switching the live watchlist to v4, not for it.
 VERSION=v2`. v4 also still has the live-feed gap noted above (candle_
 feed.py can't serve 1-min bars), so it isn't currently runnable live
 regardless of these backtest numbers.
+
+## v3 vs v4 (1-min Supertrend/Day Range) - NIFTY, BANKNIFTY, 30-day
+
+**Date:** 26 Sep 2026 (same overall thread, next session)
+**Symbols:** NIFTY, BANKNIFTY (index options, OPTIONS basket)
+**Window:** last 30 trading days (2026-08-14 to 2026-09-25) for SIGNAL
+GENERATION - but see the hard ceiling below for how much of that window
+actually produced a priced trade.
+
+**CRITICAL METHODOLOGY CAVEAT, confirmed via `nifty_options_bt_common.py`'s
+own docstring:** Dhan's instrument master only lists CURRENTLY-LISTED
+option contracts. NIFTY options expire WEEKLY and BANKNIFTY monthly (NSE's
+2024 rationalization) - once expired, a contract's historical premium
+candles are permanently unfetchable. So while the spot-index signal series
+covers the full 30 days, the vast majority of entries generated against
+older weeks/months get skipped as "no option price data," NOT because the
+signal was wrong. Confirmed in this run's own logs: **NIFTY v3 had 14
+skipped / 2 filled; NIFTY v4 had 71 skipped / 1 filled; BANKNIFTY v3 had 6
+skipped / 6 filled; BANKNIFTY v4 had 57 skipped / 8 filled.** v4's much
+higher signal frequency generates far more candidate entries, but the
+SAME expiry ceiling means most of them are equally unfillable - so v4's
+trade count advantage over v3 is much smaller here than it was for the
+NSE-equity-monthly-options symbols (PAYTM/VEDL/ASHOKLEY), and the sample
+sizes below (as low as 1 trade) are too small to draw a confident
+conclusion from on their own.
+
+**Method:** `traderBoy/backtest_v3_vs_v4_nifty_banknifty_30day.py` - same
+fixed-regime/per-variant-Supertrend+DayRange split as the PAYTM/VEDL/
+ASHOKLEY script, with index-specific spot fetch (IDX_I/INDEX) and OPTIDX
+contract resolution ported from `backtest_nifty_options_swing_v2_1min.py`
+and `nifty_options_bt_common.py` (this repo's existing NIFTY/BANKNIFTY
+options-backtest precedent). Uses the INDEX-specific volume-floor gate
+(`INDEX_VOLUME_FLOOR_RATIO_MIN=0.6x`, separate from the NSE-equity 1.2x).
+
+**Result - day-wise:**
+
+NIFTY (v3: 2 trades total; v4: 1 trade total - see ceiling caveat above):
+| Date | v3 | v4 |
+|---|---|---|
+| 08-24 | 2/1/1/+1,817/+1,817 | 1/1/0/+3,702/+3,702 |
+| **TOTAL** | **2 trades, 1W/1L, +Rs 1,817** | **1 trade, 1W/0L, +Rs 3,702** |
+
+BANKNIFTY:
+| Date | v3 | v4 |
+|---|---|---|
+| 08-24 | 1/0/1/-1,378/-1,378 | 1/0/1/-481/-481 |
+| 08-25 | 1/1/0/+5,569/+4,191 | 1/1/0/+282/-199 |
+| 08-26 | 1/0/1/-1,081/+3,110 | 1/0/1/-754/-954 |
+| 08-28 | -- | 1/0/1/-701/-1,654 |
+| 08-31 | 1/0/1/-1,019/+2,091 | -- |
+| 09-04 | -- | 1/0/1/-423/-2,078 |
+| 09-07 | 1/0/1/-1,734/+357 | 1/1/0/+180/-1,898 |
+| 09-23 | -- | 1/0/1/**-7,756**/-9,654 |
+| 09-24 | 1/1/0/+3,281/+3,638 | 1/1/0/+3,281/-6,373 |
+| **TOTAL** | **6 trades, 2W/4L, +Rs 3,638** | **8 trades, 3W/5L, -Rs 6,373** |
+
+**Combined:** v3 8 trades/3W/5L/+Rs 5,454 vs v4 9 trades/4W/5L/-Rs 2,672
+(delta -Rs 8,126). Per-symbol: NIFTY delta +Rs 1,885 (favors v4, but on a
+1-vs-2-trade sample), BANKNIFTY delta -Rs 10,011 (favors v3, on a more
+substantive 6-vs-8-trade sample, dragged down by one -Rs 7,756 v4 loss on
+09-23).
+
+**Reading this result:** directionally consistent with the PAYTM/VEDL/
+ASHOKLEY finding - v4 net negative, v3 net positive - but the sample sizes
+here are small enough (as low as 1 trade for NIFTY) that this should be
+read as "no evidence FOR v4," not strong independent confirmation against
+it. The real constraint is structural: a genuine 30-day, well-powered v4
+backtest is not possible for weekly-expiry NIFTY given Dhan's currently-
+listed-only instrument master - only the last ~1-2 weeks of signals are
+ever fillable regardless of how the strategy performs.
+
+**Outcome:** not deployed - consistent with every other v4 entry in this
+file, live `.env` remains `v2`.
