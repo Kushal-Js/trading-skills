@@ -151,9 +151,37 @@ ratios, 1% stop floor) unchanged.
    30-day sample. Read this as inconclusive on which stop style is
    actually better, not as confirmation either way - trade counts differ
    by 5x across variants (54 to 287), so per-variant results are noisy.
-3. **15min/lookback=2 has the best win rate (60.8%) of the 4**, and
-   SONACOMS is the standout performer in the two 15-min variants
-   specifically (+Rs 17,701 and +Rs 10,290 respectively) despite far
-   fewer trades - worth a closer look if this strategy is ever revisited.
+3. **15min/lookback=2 has the best win rate (60.8%) of the 4.**
 4. No variant here should be read as "the" bollinger strategy result -
    this is a parameter-sensitivity finding, not a converged answer.
+
+## Follow-up 26 Sep 2026 - SONACOMS's 15-min "standout" was mostly one trade
+
+Looked closer at why SONACOMS outperformed in both 15-min variants
+(flagged above as "worth a closer look"). It's concentrated almost
+entirely in ONE trade: `ENTER PE @ 2026-09-02 09:15 entry_price=20.35 ->
+EXIT @ 09:25 exit_price=26.05, pnl=+Rs 6,982` (TRAILING_STOP_HIT) - a
++28% option-premium move in 10 minutes, catching a real, sharp opening-
+range selloff in the underlying (SONACOMS fell from ~Rs793-803 to ~Rs785
+between 09:15-09:23, confirmed against the raw 1-min candles - a
+genuine market move, not a data artifact).
+
+That single trade is **39.4% of the 15min/lookback=2 total** (+Rs 17,701
+-> +Rs 10,719 without it) and **68.0% of the 15min/lookback=5 total**
+(+Rs 10,290 -> +Rs 3,308 without it). Strip it out and SONACOMS is no
+longer a standout in either variant, just roughly in line with the rest.
+
+**Why the 5-min variants never caught it**: the original 5min/lookback=2
+run's first SONACOMS trade that day didn't fire until 10:50 (95 minutes
+later), capturing a much smaller +Rs 1,041 instead - the 5-min pullback/
+swing state machine (confirmed swing point + 2 consecutive counter-trend
+closes before arming) simply takes longer to form than this particular
+move lasted, so it missed the front of the drop and only caught a
+smaller, later piece of the continuation.
+
+**Conclusion**: SONACOMS's 15-min edge is mostly one well-timed capture
+of a sharp opening-range move that happened to align with the 15-min
+signal structure's faster arming - not a repeatable structural advantage
+of running SONACOMS at 15-min resolution specifically. Correcting the
+earlier framing: this was overstated as "SONACOMS is the standout
+performer at 15-min" - it's one good trade, not a pattern.
