@@ -53,3 +53,61 @@ not a general verdict on all period/multiplier combinations.
 **Outcome:** live `Swing/config.py` SUPERTREND_PERIOD/SUPERTREND_MULTIPLIER
 left unchanged (10/3.0) - user asked for the comparison, not a deploy, and
 the backtest itself argues against the change.
+
+## Swing Supertrend entry-signal timeframe: 5-min (current) vs 1-min, period/mult unchanged - SONACOMS 30-day
+
+**Date:** 25 Sep 2026 (same session, direct follow-up)
+**Symbol:** SONACOMS, same window (2026-08-14 to 2026-09-25)
+**Question:** instead of tuning period/multiplier, what if the
+entry-trigger/exit-reversal Supertrend reads 1-min candles instead of
+5-min (period=10, multiplier=3.0 unchanged both ways)?
+
+**Config knob:** `Swing/config.py`'s `SUPERTREND_INTERVAL_MINUTES`
+(default 5, `SWING_SUPERTREND_INTERVAL_MINUTES` env override). Confirmed
+by reading `Swing/signals.py` (`get_supertrend_state(symbol)` with no
+explicit interval reads this default) and `Swing/trading_engine.py`
+(`_evaluate_entry_signal`): this knob **only** changes the entry-trigger/
+exit-reversal Supertrend (and the index-only Day Range branch's own
+Supertrend, not exercised for SONACOMS). It does NOT touch the 15-min
+filter-leg Supertrend (`get_supertrend_state(symbol, 15)` passes its
+interval explicitly) or the regime EMA200 5m/15m reading - those stay
+exactly as before. So this change only affects which candle grid the
+crossed_above/crossed_below edge (the actual trigger) is read from.
+
+**Method:** `traderBoy/backtest_sonacoms_supertrend_1min_vs_5min_30day.py`
+- forked from the period/multiplier comparison script, reusing its cached
+equity/option data. Same filter/gate/exit-ladder logic; only the
+Supertrend series' source candles (5-min vs 1-min) and the event loop's
+signal-candle-dedup/entry-candle bookkeeping (now 1-min-resolution for the
+NEW variant) changed.
+
+**Result:**
+
+| Variant | Trades | Wins | Losses | Win rate | Net P&L |
+|---|---|---|---|---|---|
+| CURRENT (5-min ST) | 10 | 8 | 2 | 80.0% | **+Rs 17,946** |
+| NEW (1-min ST) | 60 (59 closed, 1 still open) | 26 | 30 | 44.1% | **+Rs 40,670** |
+
+Delta: **+Rs 22,724** for the 1-min entry-signal timeframe, despite a much
+lower win rate (44.1% vs 80.0%) - avg win Rs +2,879 vs avg loss only
+Rs -1,139, a favorable ~2.5:1 win/loss size ratio that more than offsets
+firing 6x more often.
+
+**Real-world caveat (not modeled here, same as every backtest in this
+repo per `backtest-methodology.md`):** 60 trades in 30 days means ~2/day -
+6x the order flow of the current 5-min setting. This backtest uses candle
+close prices with no slippage/brokerage/bid-ask-spread modeling; at that
+frequency those costs compound meaningfully and are NOT reflected in the
++Rs 40,670 figure. The 5-min setting's smaller trade count is far more
+forgiving of unmodeled execution friction. Also worth flagging: this
+volume of same-day re-entries on one symbol would interact with the
+dup-order guard and MCX/NSE volume-floor gate far more than the current
+setting ever does in practice - worth a live-shadow/paper-trade check
+before treating this as deployable, not just a clean backtest number.
+
+**Scope:** same single-symbol, single-window caveats as the entry above.
+
+**Outcome:** not deployed - user asked for the comparison only. Given the
+6x trade-frequency increase and the unmodeled execution-cost caveat above,
+this number should NOT be read as "switch to 1-min Supertrend" without a
+paper-trade/shadow validation first.
