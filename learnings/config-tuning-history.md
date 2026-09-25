@@ -111,3 +111,27 @@ before treating this as deployable, not just a clean backtest number.
 6x trade-frequency increase and the unmodeled execution-cost caveat above,
 this number should NOT be read as "switch to 1-min Supertrend" without a
 paper-trade/shadow validation first.
+
+**Update 25 Sep 2026 (same session) - named "v4" in code, NOT deployed:**
+this feature set is now `Swing/config.py`'s `ENTRY_STRATEGY_VERSION="v4"`
+(commit pending in `traderBoy`) - same v2/v3 combined entry filter and exit
+ladder, only difference is `SUPERTREND_INTERVAL_MINUTES` forced to 1. Live
+`.env` is still `v2`; `v4` is valid but unselected.
+
+**Real blocker found while wiring this in, not yet fixed:** `Swing/
+candle_feed.py`'s live WebSocket candle feed only ever buckets raw ticks
+into `BASE_INTERVAL_MINUTES=5` bars and its `_resample` helper can only
+build COARSER multiples of that base (`interval_minutes % 5 != 0` raises
+`ValueError`) - it cannot produce 1-min bars at all. `get_supertrend_
+state`'s broad `except Exception` swallows that error and fails open to
+the last cached/`None` state, so v4 would get **no real live signal**
+whenever the WS feed is fresh (i.e. during ordinary market hours) - not a
+crash, just silent inaction. The 30-day backtest above is unaffected (it
+reads real 1-min candles straight from Dhan's REST history, never through
+`candle_feed.py`), but the number it produced is NOT yet achievable live.
+Fixing this for real means changing `candle_feed.py`'s base bucket from
+5-min to 1-min (`_resample` already generalizes to serve 5/15-min from a
+1-min base once ticks are bucketed that finely) - a materially larger
+change since EVERY Swing signal (regime EMA, both Supertrends, Day Range)
+derives from that same feed, not just v4's. Flagged to the user; not done
+without explicit go-ahead given the blast radius.
