@@ -99,3 +99,61 @@ lower-frequency v2/v3. One 30-day window is one sample.
 
 **Outcome:** informational only - not deployed, not wired into Swing.
 Purely a standalone backtest artifact per the user's explicit scope.
+
+## Update 26 Sep 2026 - 3 more variants (wider swing lookback / coarser timeframe)
+
+Direct follow-up to the floor caveat above. `SIGNAL_INTERVAL_MINUTES` and
+`SWING_FRACTAL_LOOKBACK` were made env-var-overridable
+(`BOLLINGER_SIGNAL_INTERVAL_MINUTES`/`BOLLINGER_SWING_FRACTAL_LOOKBACK`),
+same script, same 9 symbols, same 30-day window. Everything else
+(BB period=20/deviations, Vortex period=14, pullback rule, trailing
+ratios, 1% stop floor) unchanged.
+
+| Variant | Trades | Wins | Losses | Win rate | Net P&L | % entries hitting the 1% floor |
+|---|---|---|---|---|---|---|
+| 5min / lookback=2 (original) | 287 | 165 | 110 | 57.5% | **+Rs 106,240** | 96.5% (277/287) |
+| 5min / lookback=5 | 159 | 70 | 84 | 44.0% | +Rs 18,261 | 93.7% (149/159) |
+| 15min / lookback=2 | 97 | 59 | 33 | 60.8% | +Rs 39,914 | 83.5% (81/97) |
+| 15min / lookback=5 | 54 | 23 | 30 | 42.6% | +Rs 15,175 | 83.3% (45/54) |
+
+**Per-symbol, all 4 variants:**
+
+| Symbol | 5m/L2 | 5m/L5 | 15m/L2 | 15m/L5 |
+|---|---|---|---|---|
+| BANDHANBNK | +27,648 (32t) | +3,816 (15t) | +7,560 (14t) | +7,884 (8t) |
+| TORNTPHARM | +12,269 (36t) | +912 (24t) | +3,169 (12t) | -419 (4t) |
+| DLF | +7,220 (34t) | +4,417 (19t) | +2,043 (7t) | -2,185 (7t) |
+| ZYDUSLIFE | +28,935 (31t) | +13,500 (15t) | -495 (10t) | -90 (5t) |
+| SONACOMS | +10,474 (35t) | -551 (21t) | +17,701 (13t) | +10,290 (7t) |
+| CIPLA | +2,593 (28t) | -659 (16t) | +1,466 (11t) | -1,105 (7t) |
+| ASHOKLEY | +8,000 (29t) | -100 (14t) | +5,000 (13t) | +150 (8t) |
+| VEDL | +5,635 (33t) | +805 (22t) | +1,552 (9t) | +0 (4t) |
+| SOLARINDS | +3,467 (29t) | -3,880 (13t) | +1,917 (8t) | +650 (4t) |
+
+**Findings:**
+
+1. **The 1% floor caveat only partly explains the original result.**
+   Widening the swing lookback (5 bars) or the timeframe (15-min) does
+   reduce the floor-hit rate (96.5% -> 83.3-93.7%), but it stays
+   dominant in every variant - a 2-bar-vs-5-bar fractal, or 5-min-vs-
+   15-min, isn't enough on its own to make these liquid names' genuine
+   swing distances routinely exceed 1% of price. A materially different
+   swing definition (a much longer lookback, or an ATR-based stop
+   instead of a fractal one) would be needed to test the video's
+   risk rule on its own terms.
+2. **All 4 variants are net positive**, but P&L drops sharply as the
+   floor-hit rate drops: the ORIGINAL (most floor-dominated) variant is
+   also the most profitable by a wide margin (+Rs 106,240 vs +Rs
+   15,175-39,914 for the other three). This is the opposite of what
+   "the floor is masking the real strategy, fix it and see" might have
+   hoped to find - the tighter, floor-driven version outperformed every
+   attempt to make the stop more genuinely swing-based, at least in this
+   30-day sample. Read this as inconclusive on which stop style is
+   actually better, not as confirmation either way - trade counts differ
+   by 5x across variants (54 to 287), so per-variant results are noisy.
+3. **15min/lookback=2 has the best win rate (60.8%) of the 4**, and
+   SONACOMS is the standout performer in the two 15-min variants
+   specifically (+Rs 17,701 and +Rs 10,290 respectively) despite far
+   fewer trades - worth a closer look if this strategy is ever revisited.
+4. No variant here should be read as "the" bollinger strategy result -
+   this is a parameter-sensitivity finding, not a converged answer.
