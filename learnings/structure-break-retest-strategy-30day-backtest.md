@@ -135,3 +135,69 @@ strategy is ever considered for further iteration.
 **Outcome:** informational only - not deployed, not wired into Swing.
 Standalone backtest artifact, delivered per the user's explicit request
 for day-wise and trade-wise P&L reports.
+
+## Head-to-head vs. the live Bollinger strategy (27 Sep 2026 follow-up)
+
+User asked whether this strategy beats the bot's own live Bollinger
+strategy. Reran `backtest_bollinger_vortex_9symbols_30day.py` (unchanged,
+existing script) against the EXACT SAME 16-symbol current watchlist and
+the exact same `TEST_DAYS_BACK=30` request (which resolved to the same
+28 Aug - 25 Sep, 20-trading-day window on this data) for a like-for-like
+comparison. Each strategy kept its own NATIVE signal timeframe (Bollinger:
+5-min, matching its real live config; structure_break_retest: 1-min,
+matching the source video's own explicit framing) - a genuine, disclosed
+difference between how each strategy actually operates, not an unfair
+mismatch introduced for this comparison.
+
+| Metric | structure_break_retest | Bollinger (live strategy) |
+|---|---:|---:|
+| Trades | 2,287 | 498 |
+| Win rate | 43.6% | **56.9%** |
+| Net P&L (20 days) | +Rs 115,845 | **+Rs 210,985** |
+| Symbols net positive | 11 / 16 | **16 / 16** |
+| Worst single day | -Rs 21,610 (8 Sep) | -Rs 157 (16 Sep, only red day) |
+| Trades/day (combined) | ~114 | ~25 |
+
+**Bollinger wins decisively on every dimension that matters** - roughly
+82% more net P&L, 13 points higher win rate, every symbol profitable
+(structure_break_retest lost money on 5 of 16), and a dramatically
+smoother equity curve (Bollinger's day-wise P&L was negative on only ONE
+of 20 days; structure_break_retest had three days losing over Rs 9,000
+each). structure_break_retest also trades ~4.6x more often for less than
+half the profit - a much worse risk-adjusted/effort-adjusted result.
+
+Per-symbol Bollinger results (same 16 symbols, same window):
+
+| Symbol | Trades | Win% | Net P&L |
+|---|---:|---:|---:|
+| ZYDUSLIFE | 31 | 58.1% | +Rs 28,935 |
+| BANDHANBNK | 32 | 65.6% | +Rs 27,648 |
+| MCX | 33 | 69.7% | +Rs 21,904 |
+| BOSCHLTD | 27 | 63.0% | +Rs 16,000 |
+| APLAPOLLO | 36 | 47.2% | +Rs 15,767 |
+| LICHSGFIN | 34 | 45.5% | +Rs 12,600 |
+| TORNTPHARM | 36 | 66.7% | +Rs 12,269 |
+| RBLBANK | 25 | 36.0% | +Rs 12,541 |
+| MOTHERSON | 29 | 62.1% | +Rs 10,763 |
+| SONACOMS | 35 | 48.6% | +Rs 10,474 |
+| DIVISLAB | 25 | 60.0% | +Rs 9,350 |
+| ASHOKLEY | 29 | 72.4% | +Rs 8,000 |
+| APOLLOHOSP | 30 | 53.3% | +Rs 7,712 |
+| DLF | 34 | 52.9% | +Rs 7,220 |
+| CANBK | 30 | 46.7% | +Rs 6,615 |
+| VBL | 32 | 62.5% | +Rs 3,187 |
+| **COMBINED** | **498** | **56.9%** | **+Rs 210,985** |
+
+Note LICHSGFIN specifically: it was structure_break_retest's single
+biggest loser (-Rs 26,100) but Bollinger's own trade on the exact same
+symbol/window was solidly profitable (+Rs 12,600) - the same underlying
+price action, two very different outcomes depending on which setup is
+reading it, a useful illustration of why "does the strategy fit this
+instrument's own behavior" matters as much as the strategy itself.
+
+Full trade-wise CSV for this Bollinger comparison run delivered to the
+user directly (498 trades), same as structure_break_retest's own export.
+
+**Conclusion: no reason to prefer structure_break_retest over the
+already-live Bollinger strategy based on this comparison** - it is not
+being escalated for further development on the strength of this result.
