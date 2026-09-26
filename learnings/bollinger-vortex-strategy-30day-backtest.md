@@ -255,3 +255,37 @@ point in the expiry cycle could show a much shorter usable window.
 **Outcome:** informational only, same as every other Bollinger backtest
 variant in this file - not deployed, live Bollinger package stays
 NSE-equity-only.
+
+## Update 27 Sep 2026 - NIFTY/BANKNIFTY/NATURALGAS only, user request
+
+User asked specifically how the (now live, since commit `7b568ab` closed
+the MCX/index scope gap) Bollinger strategy performed on NIFTY, BANKNIFTY
+and NATURALGAS over the last 30 days, with trade-wise + day-wise P&L.
+Reran `backtest_bollinger_vortex_mcx_index_30day.py 30 NIFTY,BANKNIFTY,NATURALGAS`
+(existing script from this repo, unchanged). Window resolved to 14 Aug -
+25 Sep 2026 (28 calendar trading days with at least one signal).
+
+| Symbol | Trades | Wins | Losses | Win rate | Net P&L |
+|---|---:|---:|---:|---:|---:|
+| NIFTY | 56 | 33 | 23 | 58.9% | +Rs 6,919 |
+| BANKNIFTY | 47 | 26 | 20 | 55.3% | +Rs 10,666 |
+| NATURALGAS | 13 | 7 | 5 | 53.8% | -Rs 937 |
+| **COMBINED** | **116** | **66** | **48** | **56.9%** | **+Rs 16,648** |
+
+Both caveats already documented above for this exact symbol trio remain
+in force and were reconfirmed on this run: (1) NIFTY/BANKNIFTY both
+resolved to the single nearest "29 SEP" contract for the entire window
+(the instrument-master limitation, not a real historical roll), and (2)
+NATURALGAS trades show clearly thinner/gappier fills than the index legs
+- including one real outlier, an 18-day-held CE position (28 Aug entry ->
+15 Sep exit via MAX_LOSS_HIT, -Rs 5,500, the single largest loss in this
+run) that never found a normal exit condition for far longer than any
+NSE-equity or index trade in this repo's backtests. Treat NATURALGAS's
+own -Rs 937 net figure with the same lower-confidence caveat as before -
+it is not representative of a liquid, cleanly-fillable market the way the
+two index legs are.
+
+Full 116-trade CSV delivered to the user directly. Still informational
+only - not a live-vs-backtest comparison, this run predates any real
+NATURALGAS/index Bollinger trades actually firing live (deployed same
+day as the CANBK/VBL watchlist row, too new to have real trades yet).
