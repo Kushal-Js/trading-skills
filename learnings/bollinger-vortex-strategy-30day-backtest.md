@@ -185,3 +185,73 @@ signal structure's faster arming - not a repeatable structural advantage
 of running SONACOMS at 15-min resolution specifically. Correcting the
 earlier framing: this was overstated as "SONACOMS is the standout
 performer at 15-min" - it's one good trade, not a pattern.
+
+## Update 26 Sep 2026 - MCX (COPPER, NATURALGAS) + index (NIFTY, BANKNIFTY) backtest
+
+New script (`traderBoy/backtest_bollinger_vortex_mcx_index_30day.py`) tests
+the exact live-deployed variant (5min / lookback=2, same pure signal
+functions ported verbatim) against 4 symbols the LIVE Bollinger package
+does NOT trade (v1 scope is NSE-equity-options-only). MCX uses the
+futures contract as underlying reference + a new manual OPTFUT resolver;
+NIFTY/BANKNIFTY reuse the existing `nifty_options_bt_common.py` index
+resolver built earlier this session. 30 trading days, last 30 days as of
+26 Sep 2026.
+
+| Symbol | Trades | Wins | Losses | Win rate | Net P&L |
+|---|---|---|---|---|---|
+| COPPER | 9 | 4 | 4 | 44.4% | -Rs 6,525 |
+| NATURALGAS | 13 | 7 | 5 | 53.8% | -Rs 937 |
+| NIFTY | 56 | 33 | 23 | 58.9% | +Rs 6,919 |
+| BANKNIFTY | 47 | 26 | 20 | 55.3% | +Rs 10,666 |
+| **COMBINED** | **125** | **70** | **52** | **56.0%** | **+Rs 10,123** |
+
+### Real bug found and fixed: MCX option lot size is NOT `SEM_LOT_UNITS`
+
+First run used `SEM_LOT_UNITS` straight from Dhan's instrument master as
+the per-lot P&L multiplier for MCX OPTFUT contracts - this reports `1`
+for every single MCX row regardless of the underlying commodity (a known
+quirk `Swing/mcx_registry.py` already exists specifically to work around
+for LIVE trading - see that module's own docstring). Using it directly
+understated COPPER's P&L by 2500x and NATURALGAS's by 1250x (first,
+wrong run: COPPER -Rs 3, NATURALGAS -Rs 1; corrected: COPPER -Rs 6,525,
+NATURALGAS -Rs 937 - the numbers above). Fixed by reading the real,
+manually-verified multiplier from `data/mcx_config` (COPPER=2500,
+NATURALGAS=1250) instead, refusing to guess if a symbol has no entry
+there. **Any future script that resolves MCX OPTFUT contracts directly
+against the instrument master (bypassing Swing's own live order-placement
+path, which already reads mcx_registry correctly) must do the same -
+never trust `SEM_LOT_UNITS` for an MCX row.**
+
+### Data-quality caveat: MCX option premiums show long flat/stale stretches
+
+Confirmed by direct inspection of the cached 1-min option series: a
+NATURALGAS 295 CALL contract's price sat frozen at exactly 25.0 for 40+
+consecutive 1-minute bars immediately after a backtest entry on
+2026-08-28, then the position held for 18 days before finally exiting via
+MAX_LOSS_HIT at 21.10 - with no visible intermediate tick anywhere near
+the ~1%/~1.8-point stop levels that should have triggered a much earlier
+exit. This is consistent with genuinely thin trading in far-OTM/monthly
+MCX option contracts (Dhan's historical data appears to just carry the
+last traded price forward across long no-trade gaps, then jump straight
+past intermediate levels when the next real trade lands), not a code bug.
+**Treat COPPER/NATURALGAS options backtest results in this repo with
+materially lower confidence than NIFTY/BANKNIFTY or NSE-equity options
+backtests** - stops and exits computed against this data may not reflect
+a real fillable market on many bars. This applies to any future MCX-
+options backtest here, not just this one.
+
+### Expected caveat, confirmed again: index options' expiry ceiling
+
+Same limitation already documented for the v3-vs-v4 NIFTY/BANKNIFTY
+backtest earlier this session: Dhan's instrument master only lists
+currently-listed contracts, so every NIFTY/BANKNIFTY entry across the
+full 30-day window (14/17 Aug through 25 Sep) resolved to the single
+"29 SEP" contract nearest to expiry as of the day this backtest was RUN,
+not the true historically-correct weekly-rolling ATM contract. It happens
+to have existed far enough back to cover this window, but this is
+coincidental, not a general guarantee - a backtest run at a different
+point in the expiry cycle could show a much shorter usable window.
+
+**Outcome:** informational only, same as every other Bollinger backtest
+variant in this file - not deployed, live Bollinger package stays
+NSE-equity-only.
