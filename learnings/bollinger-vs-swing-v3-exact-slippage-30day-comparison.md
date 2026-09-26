@@ -1,4 +1,81 @@
-# Bollinger vs Swing V3 - exact live conditions + 2% slippage, 30-day head-to-head
+# Bollinger vs Swing V3 - exact live conditions + slippage, 30-day head-to-head
+
+**Update 26 Sep 2026 - flat 2% slippage replaced with inverse-to-premium
+slippage.** After delivering the original flat-2% comparison below, the
+user asked "do you think 2% slippage is fair evaluation?" Answer given: no
+- a flat percentage is either too small in absolute rupee terms for a
+cheap/thin option or too large for an expensive/liquid one, and it ignores
+that a real bid-ask spread tracks a roughly FIXED number of exchange
+ticks, not a fixed percentage of premium. The user asked to rebuild with
+slippage scaled inversely to premium. Both scripts (`backtest_v3_exact_
+slippage_9symbols_30day.py`, `backtest_bollinger_exact_slippage_
+9symbols_30day.py`) were updated in place (not forked) with:
+
+    effective_pct = clamp(MIN_TICK_SLIPPAGE_RS / premium, BASE_SLIPPAGE_PCT, MAX_SLIPPAGE_PCT)
+
+`MIN_TICK_SLIPPAGE_RS=Rs 0.10` (2x NSE's Rs 0.05 options tick size, the
+actual "inverse to premium" driver), `BASE_SLIPPAGE_PCT=0.5%` (floor for
+expensive/liquid contracts), `MAX_SLIPPAGE_PCT=10%` (ceiling for
+near-worthless deep-OTM contracts) - ~10% at Rs 1 premium, 2% at Rs 5
+(coincidentally matching the old flat rate), 0.5% at Rs 20+. Own judgment
+call, not measured NSE bid-ask data (unavailable via Dhan's historical
+REST endpoints - OHLC/volume only, no quote/depth history). Same Friday-
+square-off fix (see below) carried over unchanged.
+
+### Result - inverse-to-premium slippage
+
+| | Swing V3 (exact) | Bollinger (exact) |
+|---|---|---|
+| Trades | 31 | 287 |
+| Wins / Losses | 24 / 7 | 139 / 143 |
+| Win rate | 77.4% | 48.4% |
+| **Net P&L** | **+Rs 56,470** | **+Rs 64,075** |
+
+Per symbol:
+
+| Symbol | V3 P&L (inverse) | Bollinger P&L (inverse) | Bollinger P&L (flat 2%, for comparison) |
+|---|---|---|---|
+| BANDHANBNK | +10,908 | +21,708 | +23,682 |
+| TORNTPHARM | +3,981 | +11,104 | +4,796 |
+| DLF | +4,729 | +3,933 | -2,697 |
+| ZYDUSLIFE | +8,736 | +25,732 | +16,859 |
+| SONACOMS | +12,657 | +5,686 | -6,446 |
+| CIPLA | +2,630 | +1,228 | -2,229 |
+| ASHOKLEY | +3,300 | -6,500 | -3,289 |
+| VEDL | +2,357 | +1,840 | +307 |
+| SOLARINDS | +7,172 | -655 | -13,021 |
+
+Full trade-wise CSVs (31 and 287 rows, now including a `slippage_pct`
+column per row) delivered to the user directly.
+
+### The counter-intuitive finding: Bollinger's net P&L nearly QUADRUPLED (+Rs 17,962 -> +Rs 64,075)
+
+This looks backwards at first - the new model charges MORE slippage on
+cheap options (up to 10% vs the old flat 2%), and many Bollinger entries
+ARE cheap (single-digit premiums). But the model also charges LESS on
+anything above ~Rs 20 premium (0.5% floor vs the old flat 2%, a 4x
+reduction), and across the full 287-trade sample, enough of Bollinger's
+exits land above that Rs 20 crossover (TORNTPHARM/SOLARINDS routinely
+trade double-to-triple-digit premiums, and even BANDHANBNK/ZYDUSLIFE/
+SONACOMS's mid-range trades clear it) that the AGGREGATE slippage cost
+fell substantially despite individual cheap trades getting hit harder.
+Win rate rose too (43.2% -> 48.4%), consistent with fewer marginal winners
+being flipped into losers by a lower average slippage bite. **The lesson:
+whether a "more realistic" slippage model helps or hurts a strategy's
+backtest depends entirely on that strategy's own actual premium
+distribution, not on whether the model is directionally more granular/
+correct** - a flat 2% happened to be a worse assumption than reality for
+Bollinger's typical trade (most of which clear the Rs 20 floor-crossover),
+and a better-than-reality assumption for V3's cheapest handful of trades
+(V3 also improved, +Rs 48,626 -> +Rs 56,470, but by a smaller relative
+margin since fewer of its 31 trades sit in the sub-Rs 20 range to begin
+with).
+
+Standard caveats carry over unchanged from the section below.
+
+---
+
+## Original 26 Sep 2026 pass (flat 2% slippage) - kept for reference, SUPERSEDED above
 
 **Date:** 26 Sep 2026
 **User request:** "Run Bollinger and SWING V3 on same data set but with
