@@ -103,3 +103,71 @@ on the prior 26-Sep watchlist, none in the top-15) were dropped.
 
 See `TRADING_JOURNAL.md`'s 27 Sep entry for the deploy/restart timeline
 and post-restart validation.
+
+## Follow-up, same day: made permanent as a weekly automated scheduler
+
+User request: "Create and deploy this ATH method as a global common
+function... Create a scheduler which runs on every week on Friday at
+[midnight IST]... update SWING and BOLLINGER watchlist... MCX and Index
+entries are not to be replaced."
+
+**The composite score is now `traderBoy/fno_ath_screener.py`'s
+`get_top_n_candidates()`** - extracted from the one-off manual script into
+a real shared module so the scoring logic exists in exactly one place.
+`screen_fno_top15_composite.py` is now a thin CLI wrapper calling it;
+verified byte-identical output for every stock that scored in both
+versions before deploying, so the extraction itself changed nothing.
+
+**Autonomy - explicitly asked, not assumed**: before building this,
+Claude asked directly whether a scheduler that autonomously changes the
+live watchlist every week (no review step) should hold back on open
+positions or partial failures. User's answer: full autonomy, no holdback
+- "since we already have... Friday square-off... there won't be any open
+position... there shouldn't be any holdback." **Friday 00:00 IST was
+chosen specifically because it's the one moment in the week every
+position (NSE 15:25 IST Friday, MCX 23:25 IST Friday, NIFTY/BANKNIFTY
+daily 15:25 IST) is guaranteed already flat** - a genuinely clean design
+choice, not just risk tolerance. The scheduler still checks and logs live
+positions every run (audit trail), but this is informational only, never
+a gate. One non-position safety net was kept anyway (not something the
+user asked to skip): abort without touching any file if the scan can't
+score at least 50 stocks - a defense against a broad API outage
+producing a garbage/empty watchlist, unrelated to the position-holdback
+question.
+
+**MCX/index protection is data-driven, not a hardcoded list**:
+`dhan_wrapper.is_mcx_commodity()` and `Swing.config.INDEX_SYMBOLS` - the
+exact same live checks the rest of the codebase already uses (see the 25
+Sep MCX-live-reload refactor) - so a future manually-added MCX/index
+symbol stays protected automatically without a code change.
+
+**User also set a standing timezone rule this session** (saved to
+Claude's memory as `feedback-times-are-ist`): any time the user gives
+going forward is IST unless stated otherwise.
+
+**Deployed as `dhanboy-weekly-watchlist-refresh.timer`/`.service` on the
+droplet** (NOT in git, same convention as the other droplet-only
+timers). `OnCalendar=Thu *-*-* 18:30:00` (validated via
+`systemd-analyze calendar` before enabling) = Friday 00:00 IST. Next
+real unattended firing: Thu 2026-10-01 18:30 UTC.
+
+**Manually triggered once immediately after deploy** (with explicit user
+go-ahead, 0 live positions confirmed first) to validate end-to-end before
+trusting the unattended schedule. Worked correctly: swapped GLENMARK+NYKAA
+for APOLLOHOSP+OBEROIRLTY on both watchlists (the two new names simply
+scored higher on this run than in the same-day earlier composite run -
+normal run-to-run Dhan API fetch variance, not a bug - see this doc's own
+regression-check note above), left COPPER/NATURALGAS/NIFTY/BANKNIFTY
+untouched, wrote a full diff report to `history/2026-09-27_weekly_
+watchlist_refresh.log`, restarted cleanly.
+
+**Real side effect observed, worth tracking going forward**: two `DH-904`
+rate-limit warnings hit the live bot's own NIFTY/BANKNIFTY index candle
+fetches DURING the ~210-stock scan window - the scan's Dhan API usage
+briefly competed with the bot's own live polling. Failed open (kept last
+cached value, no crash), same as every other DH-904 case seen this
+session, but it's a genuine cost of running a heavy scan on the same
+account/rate-limit budget as the live bot. Worth revisiting (e.g. slower
+pacing, or running the scan against a delayed/cached instrument snapshot)
+if this becomes a recurring problem once the job runs unattended weekly
+rather than supervised.
