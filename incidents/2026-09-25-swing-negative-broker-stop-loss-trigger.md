@@ -1,6 +1,6 @@
 # Swing's broker-side stop-loss order sent with a NEGATIVE trigger price (open - check later)
 
-**Status:** OPEN, not fixed. Logged 28 Sep 2026 at the user's request ("add a note, will check it later"). No current exposure: Swing is paper-only since 27 Sep.
+**Status: RESOLVED - already fixed on 25 Sep 2026, same day as the incident.** This note was first written on 28 Sep as OPEN without checking the code; that was wrong. `Swing/position_store.broker_stop_trigger_and_limit` gained a `hard_stop_pct` argument on 25 Sep that takes the TIGHTER of the rupee-cap trigger and the percentage stop, so the trigger can no longer go negative; its docstring cites this exact VEDL incident. Both call sites pass it (Swing: `HARD_STOP_LOSS_PCT`; Bollinger: the trade's `stop_pct`, or a 95% backstop in hold_to_close mode since 28 Sep). Kept for the record.
 
 ## What happened (25 Sep 2026, while Swing was accidentally live-real)
 
