@@ -42,3 +42,7 @@ Findings:
 2. **Resting stop-order entry** (fire on the tick that crosses the pending trigger known at the end of the previous bar, which is the video's actual design and achievable live via the WS tick feed) is the one change that improves results in every window and both tiers, by roughly ₹1.2L/month on this watchlist.
 3. **No tested variant shows a reliable edge.** The best land near breakeven on the holdout and are still clearly negative in the earlier design window. The ₹155,652 is not recoverable by logic changes: it came from lookahead.
 4. MOTHERSON was the worst symbol in both leading variants (low premium, so slippage dominates), consistent with the ≥₹5 estimated-ATM-premium gate proposed after the SUZLON finding.
+
+## Deployed 28 Sep 2026 (traderBoy `a33ea56`, paper only)
+
+Resting-order entry (default `BOLLINGER_ENTRY_MODE=resting`), 5% minimum stop on the premium, NSE entries skipped below a Rs 5 ATM premium, and a real Bollinger paper book (`GET /bollinger/paper-trades`, `pnl_modeled` comparable to the research numbers). This is the "resting + 5% premium stop" research variant: roughly breakeven on the holdout, still negative in the earlier design window. Paper results from here are the out-of-sample test - don't put Bollinger back on real money until they (and the 210-stock walk-forward) show a positive `pnl_modeled`.
