@@ -535,3 +535,26 @@ Why the split: Swing enters on a Supertrend crossover, so its positions sit righ
 **Decision:** shipped `SWING_EXIT_TIMING=tick` (traderBoy `2479813`). Deliberately NOT built for Options/Luxury.
 
 **Caveat, both studies:** the replayed strategies were net negative before these changes (Options+Luxury −99k over 245 trades; Swing proxy −86k over 188). These exits trim losses by about 15-25%. They are not a substitute for better entries.
+
+## COPPER structure-break: 5-min Supertrend entry confirmation (28 Sep 2026)
+
+**Rule (user request).** A CALL needs the combined 5m/15m/1h structure-break agreement = +1 **and** the last closed 5-min futures candle closing above the 5-min Supertrend(10,3). A PUT needs −1 **and** the close below it. A blocked agreement stays eligible, so the entry can come later in the same agreement.
+
+**Backtest.** Real COPPER futures series; live fresh-formation and volume-floor rules; next-bar-open fills; Rs 1,500 round-trip cost. Script: `bt_copper_st_filter.py`, in that session's scratchpad.
+
+| Window | Live | + Supertrend filter | Δ |
+|---|---|---|---|
+| 12 MCX days | +35,500 | +50,250 | **+14,750** (maxDD −28k → −19k) |
+| 22 days | +1,08,500 | +1,14,875 | +6,375 |
+| 30 days | +80,625 | +83,250 | +2,625 |
+| Real Oct option prints (7 of 51 trades replayable) | −225 | +4,350 | +4,575 |
+
+Most of the gain comes from **shifting** entries to a later, confirmed bar, not from removing losers. The removed trades were net positive. Deployed 28 Sep 15:47 IST, traderBoy `1453c0b`, `SWING_COPPER_SUPERTREND_FILTER_ENABLED=true`.
+
+**Side finding, not acted on.** In the same replay the live **MCX volume-floor gate** (5m volume ≥ 1.2× its 20-bar average) was net NEGATIVE in every window:
+
+- structure-break with no gates beat live by +13k (22 days), +35k (30 days) and +4k (12 days).
+
+Worth a dedicated test before touching it.
+
+**Caveat.** Futures-point P&L ignores option delta and theta. The real COPPER option results have been negative even while this signal shows +80-115k on futures points. Read the Δ columns only.
