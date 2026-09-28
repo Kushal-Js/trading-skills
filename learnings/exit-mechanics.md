@@ -558,3 +558,33 @@ Most of the gain comes from **shifting** entries to a later, confirmed bar, not 
 Worth a dedicated test before touching it.
 
 **Caveat.** Futures-point P&L ignores option delta and theta. The real COPPER option results have been negative even while this signal shows +80-115k on futures points. Read the Δ columns only.
+
+## COPPER re-entry churn: HTF exit + re-entry break (28 Sep 2026)
+
+**Trigger.** A real COPPER PUT was exited at 19:30 IST by a 5m-only structure-break flip: a close 0.03 above the band, with 15m and 1h still bearish. It re-entered the same view at a worse price at 19:55, costing −Rs 1,925 plus about Rs 2,175 of round trip.
+
+**Variants tested.** Scripts: `bt_copper_reentry.py` and `bt_copper_d10.py`, in that session's scratchpad. Real futures; live entry rules including the 5m Supertrend filter; Rs 1,500 round-trip cost.
+
+| Variant | Trades (30 days) | Quick re-entries | Δ net vs live, 30 days |
+|---|---|---|---|
+| **HTF+BREAK** (see below) | 68 → **25** | 14 → **0** | **+Rs 211k**; maxDD −89k → −28k; win 32% → 56% |
+| HTF-EXIT alone | 33 | – | +Rs 180k |
+| BREAK-EXT alone (Bollinger pending-stop idea) | 46 | – | +Rs 32k |
+| COOL60 | – | – | +Rs 15k, but best on real option replay: +10,850 over 9 trades |
+| Supertrend-confirmed exits | – | – | −Rs 26k (lag gives back more than it saves) |
+| 10-candle Donchian break, entry and/or exit | – | 14 → 8 | −Rs 3k to −Rs 32k |
+| Bollinger TRIGGER entry | – | – | worse |
+| Bollinger tight trailing exit | – | – | much worse |
+
+HTF+BREAK means:
+
+- **HTF exit:** ignore 5m-only lapses; exit only on a 15m/1h break or a full reversal.
+- **Re-entry break:** a same-side re-entry within 6h must trade through the previous trade's best futures extreme.
+
+**Decision.** User chose to replace the live rules directly rather than run a paper profile first. Deployed 28 Sep 20:24 IST, traderBoy `aee3c29`:
+
+- `SWING_COPPER_HTF_EXIT_ENABLED=true`
+- `SWING_COPPER_REENTRY_BREAK_ENABLED=true`
+- `SWING_COPPER_REENTRY_BREAK_WINDOW_HOURS=6`
+
+**Watch.** Only 4 HTF+BREAK trades were replayable on real option prices. Longer holds cost option theta, which futures P&L ignores. Judge it on the real COPPER trades that follow.
