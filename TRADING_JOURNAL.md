@@ -88,6 +88,12 @@ evidence" links to the `designs/` doc where a real backtest exists;
 under that specific config to judge it (many recent rows are too new to
 judge yet - flagged explicitly).
 
+### 28 Sep 2026
+
+| Change | Strategy | Backtest evidence | Real PnL since |
+|---|---|---|---|
+| **Bollinger switched REAL -> PAPER, pre-market** (`POST /paper-mode {"strategy":"Bollinger","enabled":true}`, no restart; droplet `.env` auto-synced to `BOLLINGER_PAPER_MODE_ENABLED=true`, override persisted, local `.env` synced to match) - user request, after a lookahead bug was found in every Bollinger backtest: the backtests entered during the 5-min bar that fires (using that bar's full high/low), while the live engine can only act after the bar closes (both the WS candle feed and the REST fallback drop the still-forming bar). With live-faithful entry timing, the current 15-stock watchlist flips from +Rs 155,652 to **-Rs 66,254** over Aug 28 - Sep 25 (real option premiums), and a ~90-day synthetic-premium tier flips from +Rs 2,50,099 (49% win) to -Rs 2,43,044 (26% win). Full write-up: `learnings/bollinger-backtest-lookahead-bias-entry-timing.md`. | Bollinger | `traderBoy/walkforward_selector_eval.py` (reproduces the old script's ₹155,652 exactly with the old timing, then isolates the timing change) | Switched 28 Sep ~08:12 IST (02:42 UTC), before market open. 0 open Bollinger positions before the switch, nothing to carry. Confirmed via `GET /paper-mode` (`Bollinger: paper_mode_enabled=true, source=runtime_override`) and the droplet log line. All 4 live packages are now paper. Watch: Bollinger's paper trades from today onward are the first real-time (not backtested) measure of this entry logic. |
+
 ### 27 Sep 2026
 
 | Change | Strategy | Backtest evidence | Real PnL since |
