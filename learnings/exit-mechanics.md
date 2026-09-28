@@ -480,3 +480,58 @@ The fix is narrow either way: lower `DYNAMIC_SL_STEP_PCT_CE`/`_PE` (and/or
 can complete before target, or accept that at 20%/20% the ratchet is
 pure dead weight and could be disabled (`ENABLE_DYNAMIC_SL=false`)
 without changing live behavior at all right now.
+
+## MCX option profit-protection: fix the execution, not the rule (28 Sep 2026)
+
+This came from the COPPER 23 OCT 1400 PUT early exit (`incidents/2026-09-28-copper-put-profit-protection-early-exit.md`).
+
+**Method.** The Oct COPPER and NATURALGAS contracts are the only ones with data; Dhan returns nothing for expired contracts. Only 8 of 53 structure-break signal trades had a strike that traded near entry, too few to judge. So the test was made signal-independent:
+
+- Every 15 min of MCX session, open an ATM CE **and** PE, only if that strike traded in the prior 15 min.
+- Hold up to 3 h under the live ladder: MAX_LOSS 4500, TARGET (COPPER 20%, NG 35%), PP 4000 / 2%, SL 20%.
+- Replay print by print: a zero-volume 1-min bar produces no prints.
+- Direction nets out, so only the per-variant **difference** matters.
+- Script: `bt_mcx_pp_sliced.py`, in that session's scratchpad.
+
+| Variant (vs live) | COPPER (507 entries) | NATURALGAS (1,397) |
+|---|---|---|
+| Same rule, **limit exit** at trigger, market after 3 min | **+77,250** | +6,375 |
+| Arm only after 2 traded 1-min closes above the level | −4,350 | +13,375 |
+| Arm only after 3 traded closes | −8,750 | +28,312 |
+| Giveback 5% / 8% | −78,300 / −64,650 | +7,375 / −7,438 |
+| Keep 50% of peak profit | −90,400 | +29,625 |
+| Arm at 6000 | −29,625 | +29,062 |
+| PP off | **−1,06,000** | **+51,375** |
+
+Liquidity decides the answer:
+
+- **COPPER:** 75 of the 112 live-rule PP exits were armed by a 1-min bar of 3 lots or fewer. Gains there are fleeting, so banking fast *is* right. The loss is the market order into an empty book, about Rs 690 per exit.
+- **NATURALGAS:** median arming bar is 135 lots. There the PP rule itself looks mildly harmful: PP off was +51k. Not acted on yet; worth a dedicated NG study.
+
+Only the limit exit was shipped: `SWING_MCX_PP_LIMIT_EXIT_ENABLED`, traderBoy `2479813`.
+
+## Tick-based vs candle-close SIGNAL exits: helps Swing, hurts Options/Luxury (28 Sep 2026)
+
+"Tick" here means: exit the moment the underlying crosses the last closed 5-min candle's Supertrend line, or the price P* at which the forming candle would complete an EMA 9/12 cross. It never fires inside the entry candle. "Close" is live today.
+
+Price exits (MAX_LOSS / TARGET / PP / SL) were **already** tick-driven in all four packages via `on_price_tick`. Only the signal exits were candle-close.
+
+**Options/Luxury.** Method: replay of every real + paper trade, 1-28 Sep, using each package's own live `_exit_reason_for`, `Position` trailing-SL and square-off functions (clock monkey-patched), continuous 5-min indicators, and real option 1-min prints. The close-replay matched the real exit reason on 142 of 245 trades.
+
+| Package | Trades | Exits changed | Tick − close |
+|---|---|---|---|
+| Options | 107 | 8 | −4,367 |
+| Luxury | 110 | 12 | −1,317 |
+| Swing (logged) | 28 | 2 | +1,761 |
+
+**Swing, larger sample.** Every 5-min Supertrend crossover agreeing with the 15-min Supertrend, on the 17 NSE watchlist symbols, over 20 days, trading the ATM Sep-29 option under the live Swing ladder:
+
+- 188 trades: tick **+21,207** (53 exits better, 15 worse; 14 of 17 symbols positive).
+- Still **+14,595** when every tick exit is filled at the option's LOW of that minute.
+- Median hold drops from 66 to 56 min.
+
+Why the split: Swing enters on a Supertrend crossover, so its positions sit right at the line and a cross back is a real reversal. Options/Luxury already exit fast through PP / trailing / liquidity and move-confirmation gates, so a tick exit mostly adds whipsaw.
+
+**Decision:** shipped `SWING_EXIT_TIMING=tick` (traderBoy `2479813`). Deliberately NOT built for Options/Luxury.
+
+**Caveat, both studies:** the replayed strategies were net negative before these changes (Options+Luxury −99k over 245 trades; Swing proxy −86k over 188). These exits trim losses by about 15-25%. They are not a substitute for better entries.

@@ -244,3 +244,8 @@ still exists in the repo and the findings below remain true of it.
 5. For day-wise and trade-wise reports: recompute P&L directly from each
    trade's `entry_price`/`exit_price`/`quantity` in the JSON rather than
    trusting only the script's own printed summary.
+
+## Two traps found 28 Sep 2026
+
+- **Forming-candle look-ahead in `backtest_v3_exact_slippage_9symbols_30day.py`.** It reads the signal via `idx_at_or_before(fast_ts, t)`, which returns the 5-min bar that *started* at or before t, i.e. the still-forming candle. That is the same bias class as the Bollinger entry-timing bug. Use "last candle with start + interval ≤ t" instead, as `exit_ladder_backtest_helper.evaluate_exit_reason` already does. Its old results should be treated as optimistic.
+- **Expired contracts return no 1-min data** from `/charts/intraday`. That includes MCX monthlies the day after expiry. A backtest spanning a roll silently loses every trade on the expired contract. Count what was actually replayed, not what was generated.

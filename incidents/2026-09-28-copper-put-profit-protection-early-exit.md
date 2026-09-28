@@ -22,7 +22,14 @@ MCX-options profit protection is `SWING_PROFIT_PROTECTION_RS_MCX=4000` with `...
 
 With the underlying flat, a print of 23.79 or higher after 11:12 was almost certainly a spread or odd-lot print in a thin contract, not a real move. The next print back near the mid tripped the 2% floor. The market sell then filled 0.3–0.4 below the floor. So the rule armed at Rs 4,000 of paper profit but banked Rs 1,900.
 
-**Caveat:** the bot does not log option LTPs, so the actual peak print was not captured. Confirming it needs the contract's 1-min candles, which requires a user-supplied Dhan token (never mint a pin_totp session locally).
+**Confirmed later the same day** from the contract's real 1-min candles (user-supplied read-only token):
+
+- 11:55: 1 lot traded, taking the premium from 22.43 to 23.18.
+- 11:56–11:57: 3 more lots traded, reaching **23.80**. That is a profit of Rs 4,025, so the rule armed.
+- 11:58–12:03: zero volume.
+- 12:05: the bar was O 23.5, L 22.95, C 23.0 on 14 lots. The low printed below the 23.32 giveback floor, so the rule fired.
+
+The restart did NOT matter here. The pre-restart peak was 23.76 at 11:01, just under the 23.79 arm level.
 
 ## Pattern, not a one-off
 
@@ -39,3 +46,11 @@ This was **not** a close-based vs tick-based timing problem. `PROFIT_PROTECTION_
 - arm only on the bid, or on N consecutive prints;
 - measure giveback as a % of peak profit instead of peak price;
 - exit with a limit order instead of a market order.
+
+## Outcome (same day)
+
+Backtests are in `learnings/exit-mechanics.md` → "MCX option profit-protection: fix the execution, not the rule". The PP rule itself was the right one for COPPER; the market-order exit was the leak. Shipped in traderBoy `2479813`:
+
+- **`SWING_MCX_PP_LIMIT_EXIT_ENABLED`:** a PP exit on an MCX option goes out as a sell limit at the trigger price, falling back to market after 180s or on a hard-stop / max-loss breach.
+
+The same investigation found a real Swing bug. A bought PE is `instrument_side == "LONG"`, and `_evaluate_exit_signal` read the reversal direction from that alone. So every OPTIONS PE since 15 Sep exited on a *bearish* crossover and ignored the bullish one. Fixed in the same commit.
