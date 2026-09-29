@@ -28,3 +28,17 @@ Dhan `/charts/rollingoption` (`dhanhq.expired_options_data`) works for expired i
 Verified 29 Sep vs listed contracts (within Rs 0.30-0.60). It is ATM-relative: rebuild a fixed
 strike minute-by-minute from the ATM+/-k series whose `strike` equals it. Monthly stock / BANKNIFTY
 options are only directly fetchable until their expiry day - fetch them that evening at the latest.
+
+## Follow-up (29 Sep, same evening) - adding the short side (BEARISH -> buy ATM PE)
+Same rules, resting sell-stop on the BEARISH trigger, one position per symbol. Separate "both" variant.
+
+| variant | trades | net modeled | long leg | short leg | max DD |
+|---|---|---|---|---|---|
+| long-only, 3000 | 151 | +9,452 | +9,452 | - | -57,498 |
+| long-only, 4500 | 142 | +37,445 | +37,445 | - | -39,512 |
+| both, 3000 | 270 | -23,374 | +14,598 | -37,972 | -83,385 |
+| both, 4500 | 250 | +5,840 | +55,587 | -49,747 | -56,554 |
+
+Short side loses on stocks (-40k at 4500) and MCX; small positive on NIFTY/BANKNIFTY (+6k, 15 trades).
+Even raw (pre-slippage) the short leg is negative (-22k). Confirms the SIDES="long" research: the
+BEARISH trigger has no hold-to-close edge. Rolling-option PUT series priced by matching the strike field.
