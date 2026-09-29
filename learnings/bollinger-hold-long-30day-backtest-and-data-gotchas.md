@@ -42,3 +42,26 @@ Same rules, resting sell-stop on the BEARISH trigger, one position per symbol. S
 Short side loses on stocks (-40k at 4500) and MCX; small positive on NIFTY/BANKNIFTY (+6k, 15 trades).
 Even raw (pre-slippage) the short leg is negative (-22k). Confirms the SIDES="long" research: the
 BEARISH trigger has no hold-to-close edge. Rolling-option PUT series priced by matching the strike field.
+
+## Exit-policy study (29 Sep, same evening) - CE side, MAX_LOSS 4500, same entries
+Script: `traderBoy/backtest_bollinger_hold_long_exit_variants.py`. H1 = 31 Aug-11 Sep, H2 = 15-29 Sep.
+
+| policy | trades | net modeled | raw | max DD | H1 | H2 |
+|---|---|---|---|---|---|---|
+| A baseline hold to 15:15 | 142 | +37,445 | +74,475 | -39,512 | +53,596 | -16,151 |
+| book +2k, re-enter on new high | 289 | -11,287 | +71,565 | -51,146 | +30,911 | -42,198 |
+| book +1.5k, re-enter | 338 | +12,851 | +1,09,359 | -27,527 | +28,508 | -15,658 |
+| trail keep 50% after +2k | 161 | +25,229 | +67,481 | -21,709 | +2,664 | +22,564 |
+| exit on 5-min trend-filter fail | 161 | +12,504 | +53,574 | -30,865 | +37,720 | -25,216 |
+| breakeven stop after +2k | 148 | +61,772 | +1,00,416 | -32,602 | +62,125 | -353 |
+| breakeven after +1.5k | 151 | +85,933 | +1,25,052 | -25,290 | +74,256 | +11,677 |
+| no entries after 14:00 | 114 | +55,274 | +84,328 | -38,131 | +62,654 | -7,380 |
+| **BE after +1.5k + no entry after 14:00** | 121 | **+97,329** | +1,27,836 | **-23,614** | +82,030 | +15,299 |
+
+Mechanism: the edge is a few big winners held to 15:15. Anything that CAPS winners (targets, re-entry
+booking, trails, trend exits) hurts; things that cut the LOSING tail without capping winners help -
+a breakeven stop once a trade has gone ~Rs 1.5-2k green (MAX_LOSS hits 26 -> 11) and skipping late
+entries that have no time to develop. Book-and-re-enter looks great raw but doubles trade count and
+slippage (~Rs 290/trade modeled, brokerage/STT not even included) eats it.
+Caveat: 21 days, thresholds picked in-sample (monotonic trends: earlier BE and earlier cutoff better) -
+forward-test as its own paper profile before trusting.
