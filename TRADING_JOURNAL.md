@@ -88,6 +88,12 @@ evidence" links to the `designs/` doc where a real backtest exists;
 under that specific config to judge it (many recent rows are too new to
 judge yet - flagged explicitly).
 
+### 30 Sep 2026
+
+| Change | Strategy | Backtest evidence | Real PnL since |
+|---|---|---|---|
+| **New strategy: Super Bollinger, REAL** (traderBoy `0cf89f7`, new `SuperBollinger/` package). The Bollinger Hold-Long paper strategy promoted to its own strategy with the best 29 Sep exit-study rules. NSE stocks on `data/bollinger_watchlist` only (no NIFTY/BANKNIFTY, no MCX). BULLISH resting trigger only, 1 lot ATM CE, roll within 2 trading days, Rs 5 min premium. Exits: Rs 4,500 max loss, breakeven stop once Rs 1,500 in profit, 15:15 square-off. No entries from 14:00. Max 5 open. Own position store, paper book, event log (`super_bollinger_events`) and trade-history tag `SuperBollinger`. Every setting is runtime: `GET/POST /super-bollinger/config` (persisted + `.env` synced), paper/real via `/paper-mode` "SuperBollinger". **One real Bollinger-family position per stock**: Bollinger and Super Bollinger claim the stock in `cross_strategy_registry` and refuse it if the other holds it for real (same ATM CE would net at the broker and one exit would close the other). Bollinger Hold-Long paper profile turned off (`BOLLINGER_HOLD_LONG_ENABLED=false`). | Super Bollinger (real); Bollinger (entry guard only) | `learnings/bollinger-hold-long-30day-backtest-and-data-gotchas.md`: 31 Aug-29 Sep, stocks only, 5 concurrent: +Rs 1,02,091 modeled (108 trades, 28.7% win, max DD -Rs 17,810) vs +Rs 56,551 for plain hold-to-15:15. Thresholds picked in-sample on 21 days - treat as unproven. Account balance at deploy: Rs 71,840 (shared with Bollinger), so live will take fewer concurrent trades than the backtest. | Deployed 30 Sep 00:30 IST (29 Sep 19:00 UTC), all strategies flat. Not yet. |
+
 ### 28 Sep 2026
 
 | Change | Strategy | Backtest evidence | Real PnL since |
