@@ -16,4 +16,6 @@
 
 **Found in the same deploy.** The supervisor keeps each CE's entry spot in memory only. After the restart it would have re-seeded the entry spot from the current spot (~2216 instead of 2223.5). Now a re-adopted CE takes its entry spot from today's `POSITION_OPENED` trigger price. At 10:24 the hedge fired on a 10.7-point drop against an ATR of 6.33; measured from the restart spot, the drop was only ~3 points and the hedge would not have fired.
 
+**Follow-up (1 Oct 2026 audit).** The fix did not end the failures. From 13:30 to 15:30 IST there were ~2,900 failed REST LTP calls, mostly on the REAL contracts. 3 real CEs + 2 real hedges, each read 2–3 times per 2 s cycle, exceed ~1/s on their own. 65 of the day's 75 complete price-check failures on real positions fell in that window. See [`learnings/price-path-cost-rest-budget-and-memory.md`](../learnings/price-path-cost-rest-budget-and-memory.md).
+
 **Lesson.** Paper and real share every Dhan rate budget. Whenever a new paper engine polls prices, count its REST calls per second against Dhan's limits as if they were real. Real positions must never queue behind simulated ones.
