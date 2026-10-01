@@ -200,3 +200,27 @@ in-sample). traderBoy `research_super_bollinger_1h_rolling_window.py`.
   edge is therefore sensitive to candle alignment - treat it as fragile/possibly partly luck (in-sample), and
   watch its live skips (ENTRY_SKIPPED_1H_RED) against what those trades would have done.
 - Live rule unchanged (user's decision pending at the time of writing).
+
+## 1 Oct 2026 - Super Bollinger's hedge / scale-in on SWING's actual trades (user request)
+
+traderBoy `research_swing_hedge_scale_actual_trades.py` (`082b566`, `b399c84`). 47 closed Swing NSE option
+trades entered 29 Sep - 1 Oct (paper + 3 real SwingIndex; 28 Sep untestable - contracts expired 29 Sep, the
+intraday API returns nothing; MCX left out). Real 1-min prices, modelled slippage, added legs closed 15:15.
+Swing as traded +1,698.
+
+| hedge trigger | hedges | stopped | hedge legs | + S1 |
+|---|---|---|---|---|
+| SB rule: -1,800 + 1 ATR (1-min) | 15 | 8 | -8,116 | +4,810 |
+| + Supertrend against | 0 | - | 0 | - |
+| Supertrend against only | 4 | 3 | -4,958 | -92 |
+| 1 ATR on a CLOSED 5-min bar | 12 | 5 | -2,643 | +4,810 |
+| 1.5 ATR | 15 | 6 | -4,408 | +6,336 |
+| 2 ATR | 12 | 6 | -8,214 | +1,499 |
+| reverse at Swing's losing Supertrend exit | 16 | 3 | +1,681 | - |
+
+- Swing's losers bounce after the trigger far more than Super Bollinger's - the SB hedge rule loses on Swing.
+- A Supertrend-confirmed hedge cannot fire during a Swing trade: Swing itself exits on the Supertrend flip
+  (on the tick), before a closed 5-min bar shows it. The workable form is a stop-and-reverse leg at that exit.
+- Confirming the ATR move on a CLOSED 5-min bar (not a 1-min touch) cut hedge losses by two thirds.
+- S1's gain is mostly one trade (SONACOMS +4,837); the reverse leg's gain mostly one (NIFTY +3,676).
+  Three days, 12-16 legs: no conclusion either way - needs the Aug-Sep replay or a separate paper variant.
