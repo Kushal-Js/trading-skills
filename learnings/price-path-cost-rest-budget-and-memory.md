@@ -18,7 +18,8 @@ and the droplet (1 vCPU, 961 MB RAM, 1 GB swap). Follow-up to
 - the bot and the watchdog run from `.venv/bin` directly, without the `uv run` wrapper (~60 MB back). A dependency
   change now needs `uv sync` on the droplet before the restart;
 - the weekly job restarts the bot first (safe_restart) when the droplet has under 450 MB available;
-- `fwupd` (~29 MB) is an OS service and was left alone.
+- `fwupd` (~29 MB, firmware updates - nothing to update on a VM): masked and stopped by the owner on 1 Oct
+  ~08:52 IST (`systemctl mask --now fwupd fwupd-refresh.timer`; undo with `systemctl unmask`).
 
 The first market day for all of this is 1 Oct; compare `/feed-stats` and the `could not fetch LTP` count against the
 30 Sep numbers below.
