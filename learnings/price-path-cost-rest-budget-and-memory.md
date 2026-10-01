@@ -11,8 +11,17 @@ and the droplet (1 vCPU, 961 MB RAM, 1 GB swap). Follow-up to
 - quiet contracts trusted for up to 15 s while the feed is alive;
 - one shared price read per Super Bollinger position per cycle.
 
-Section 4 (worker-pool blocking: quote waits, order polling) and section 5 (droplet RAM) are still open. Their
-first market day is 1 Oct; compare `/feed-stats` and the `could not fetch LTP` count against the 30 Sep numbers below.
+**Update (1 Oct 2026 08:43 IST, traderBoy `18d7f93`):** sections 4 and 5 are deployed too:
+- every order wait uses `wait_for_order_result_async` (asyncio.sleep between polls, only the REST reads in the
+  executor); bid/ask quotes use `get_option_quote_async`; `get_cached_option_ltp` is called directly, not through the
+  worker pool;
+- the bot and the watchdog run from `.venv/bin` directly, without the `uv run` wrapper (~60 MB back). A dependency
+  change now needs `uv sync` on the droplet before the restart;
+- the weekly job restarts the bot first (safe_restart) when the droplet has under 450 MB available;
+- `fwupd` (~29 MB) is an OS service and was left alone.
+
+The first market day for all of this is 1 Oct; compare `/feed-stats` and the `could not fetch LTP` count against the
+30 Sep numbers below.
 
 ## 1. The real book alone runs out Dhan's price budget
 
