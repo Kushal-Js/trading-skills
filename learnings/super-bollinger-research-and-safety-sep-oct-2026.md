@@ -178,3 +178,25 @@ already filled, so the position was flat and nothing broke.
 
 **Rule:** any change that moves a protective stop closer to the bot's own exit price must also make every
 "cancel, then exit" path fail closed. Never send the exit while the old order's state is unknown.
+
+## 1 Oct 2026 - 1-hour entry filter: candle alignment test (user request)
+
+Question: should the 1-hour-green filter use a candle that runs across the overnight break instead of the
+09:15-anchored candle (whose last candle of the day is a 15-minute 15:15-15:30 piece)? Same harness as the
+30 Sep filter re-simulation (HYBRID weekly picks 3 Aug - 29 Sep, slot limit, CE only, modelled P&L, cache only,
+in-sample). traderBoy `research_super_bollinger_1h_rolling_window.py`.
+
+| last closed candle green | trades | plain | max dd | + hedge + S1 | before 10:15 |
+|---|---|---|---|---|---|
+| no filter | 193 | +63,495 | -45,752 | +124,150 | 36 / +6,189 |
+| 09:15-anchored (live) | 163 | +94,945 | -22,773 | +145,997 | 24 / +19,873 |
+| rolling last 60 min | 184 | +61,621 | -28,341 | +118,897 | 36 / +6,189 |
+| grid at 09:45, overnight 15:00->09:45 | 175 | +53,374 | -50,346 | +122,930 | 34 / -2,666 |
+| grid at 09:30, overnight 14:45->09:30 | 185 | +52,836 | -48,796 | +116,978 | 36 / +6,189 |
+
+- A rolling hour ending at the trigger is nearly always green for an upside band breakout (the breakout itself
+  made it green) - it repeats the signal instead of filtering it (13 skips vs 42).
+- Shifting the hourly grid by 15-30 minutes turns the filter's gain into a loss vs no filter. The 09:15-anchored
+  edge is therefore sensitive to candle alignment - treat it as fragile/possibly partly luck (in-sample), and
+  watch its live skips (ENTRY_SKIPPED_1H_RED) against what those trades would have done.
+- Live rule unchanged (user's decision pending at the time of writing).
