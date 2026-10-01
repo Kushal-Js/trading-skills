@@ -224,3 +224,14 @@ Swing as traded +1,698.
 - Confirming the ATR move on a CLOSED 5-min bar (not a 1-min touch) cut hedge losses by two thirds.
 - S1's gain is mostly one trade (SONACOMS +4,837); the reverse leg's gain mostly one (NIFTY +3,676).
   Three days, 12-16 legs: no conclusion either way - needs the Aug-Sep replay or a separate paper variant.
+
+## 1 Oct 2026 - CORRECTION: which candle the 1-hour filter judges before 10:15 (stocks)
+
+Dhan's intraday data for NSE STOCKS ends at 15:14 (1-min) / the 15:10 5-min bar every day since 3 Aug 2026
+(until 31 Jul it ran to 15:29/15:25); indices still run to 15:29. (Likely the cash market's closing-auction
+session - unverified.) So for stocks the "last closed 1-hour candle" before 10:15 is the previous session's
+FULL 14:15-15:15 hour, not a 15:15-15:30 stub - in the 3 Aug - 29 Sep backtest AND live (the morning restart
+leaves only the REST base, which has no bars after 15:14). Only NIFTY/BANKNIFTY get the 15-min stub. Live 1 Oct:
+PAGEIND trigger 36,875 at 10:07 skipped (ENTRY_SKIPPED_1H_RED, candle 30 Sep 14:15 open 36,535 -> close 36,500) -
+consistent with the backtested rule. The "overnight 15:00->09:45" grid tested above therefore had only 45 minutes
+of stock bars in its overnight candle.
