@@ -5,6 +5,15 @@ Dhan connection that every package uses (`Options/dhan_client.py`), Super Bollin
 and the droplet (1 vCPU, 961 MB RAM, 1 GB swap). Follow-up to
 [`incidents/2026-09-30-paper-positions-saturate-rest-ltp-quote-budget.md`](../incidents/2026-09-30-paper-positions-saturate-rest-ltp-quote-budget.md).
 
+**Status (1 Oct 2026 07:06 IST):** fixes for sections 1-3 are deployed (traderBoy `1e7f2ff`):
+- memoized lookups;
+- one shared quote budget, with direct REST LTP by security id;
+- quiet contracts trusted for up to 15 s while the feed is alive;
+- one shared price read per Super Bollinger position per cycle.
+
+Section 4 (worker-pool blocking: quote waits, order polling) and section 5 (droplet RAM) are still open. Their
+first market day is 1 Oct; compare `/feed-stats` and the `could not fetch LTP` count against the 30 Sep numbers below.
+
 ## 1. The real book alone runs out Dhan's price budget
 
 The 30 Sep morning fix (`da4942c`, 10:12 IST) stopped paper positions using REST prices. The afternoon was still
@@ -134,10 +143,9 @@ Do not raise `EXECUTOR_MAX_WORKERS` on a closed market; see
   `_entry_inflight`'s check-then-add is not atomic across threads. Only one can win: `PROFILE.consumed` is checked and
   set with no `await` in between, and real entries also go through `cross_strategy_registry.try_claim` and
   `position_store.reserve_symbol`. Worst case is a wasted evaluation.
-- **Capacity.** `open_count()` (real + paper) is checked before awaits, so concurrent entries can overshoot the
-  combined count. Real positions are capped atomically in `reserve_symbol`. Paper index positions (NIFTY/BANKNIFTY,
-  paper since 30 Sep 20:19 IST) still count toward the 5 slots, so they can block a real stock entry. That is by
-  design, but worth knowing.
+- **Capacity.** The slot check runs before awaits, so concurrent entries can overshoot it. Real positions are capped
+  atomically in `reserve_symbol`. *(Updated 1 Oct: as of traderBoy `c74d89f`, paper positions have their own limit
+  and no longer take real slots. Before that, a paper NIFTY/BANKNIFTY position could block a real stock entry.)*
 - **State files.** `live_state`, `best_price_memory` and `position_memory` are written only from the event loop, one
   file per strategy, with tmp + `os.replace`. No write races.
 - **Orphan sweep.** It skips orders that an in-flight intent owns, skips everything while any intent has no order id
