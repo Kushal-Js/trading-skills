@@ -36,8 +36,26 @@ candles, no prices) until the Dhan Data API plan is renewed.
 - **Read the error codes per time window before diagnosing.** "DH-902 since 22:47" was really DH-906 (token) until
   00:00 and DH-902 (data plan) after - two different problems with two different fixes.
 
-## Still open (user's call)
-- The bot never re-authenticates when its token goes invalid mid-run (in market hours UM could not read orders or
-  exit) - needs an in-process re-login on DH-901/DH-906.
-- Startup login gives up after 2 TOTP attempts and exits; systemd restarts paper over it. More in-process retries
-  with backoff would avoid the crash-loop (and any TOTP lockout risk).
+## Follow-up, 2 Oct 06:20-07:30 IST
+- **The retry timer itself knocked the bot off its session.** The 06:20 IST retry ran after 05:30 IST = UTC
+  midnight. Tradehull names its token file by the UTC date, found no file for "today", logged in with PIN+TOTP and
+  minted a new token - Dhan allows one active token per account, so the running bot got DH-906 from 06:20 until
+  the 08:00 morning refresh (which reuses the job's token). Retry window narrowed to 00:00-05:25 IST any day +
+  08:15-23:59 IST at weekends (timer changed on the droplet ~07:15; script check in `0bc237e`).
+- **Both login weaknesses fixed in traderBoy `0bc237e`** (user: "Fix both login issues"):
+  - startup: 6 PIN+TOTP rounds in-process (backoff 30/60/120/240/300 s, each in a fresh TOTP window) instead of
+    2 tries then exit;
+  - session guard: GET /v2/profile every 60 s; on a definite "invalid" the bot first adopts a newer token another
+    droplet process already saved, else mints one (15 s timeout, PIN never logged), swaps it in place on the
+    existing client, reconnects both WebSockets; max 3 an hour, then a loud error.
+  Verified with fake-Dhan scripts only (26/26); deploy pending the user's go-ahead.
+
+## Lessons (added)
+- **Every login mints a session that evicts the previous one.** Anything that can log in (a timer job, a local
+  script) must reuse the live bot's token, or run only when a fresh login cannot hurt.
+- **Date-keyed caches + a UTC server clock = a daily 05:30 IST cliff.** Check what changes at UTC midnight before
+  scheduling anything between 05:30 and 08:00 IST.
+
+## Still open
+- Pre-existing, not fixed: on a network error during PIN+TOTP, Tradehull/dhanhq log the request URL (PIN included)
+  to `Dependencies/log_files`; dhanhq's OrderUpdate prints the access token on every connect (journal).
