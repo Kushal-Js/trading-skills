@@ -56,6 +56,21 @@ candles, no prices) until the Dhan Data API plan is renewed.
 - **Date-keyed caches + a UTC server clock = a daily 05:30 IST cliff.** Check what changes at UTC midnight before
   scheduling anything between 05:30 and 08:00 IST.
 
-## Still open
-- Pre-existing, not fixed: on a network error during PIN+TOTP, Tradehull/dhanhq log the request URL (PIN included)
-  to `Dependencies/log_files`; dhanhq's OrderUpdate prints the access token on every connect (journal).
+## Deployed (2 Oct, user: "yes deploy now and fix both leaks too")
+- 07:27:49 IST `0bc237e` (login retries + session guard): reused the 06:20 token, no TOTP; 10 checks, 0 re-logins
+  in its first 10 minutes.
+- 07:38:42 IST `167b2ec` - two credential leaks closed:
+  - PIN: in pin_totp mode the bot no longer hands the PIN to Tradehull/dhanhq (their login path logs, prints and
+    tracebacks the request error - on a network error that text is the URL with PIN and TOTP). It reuses the cached
+    token or mints one itself (network errors by class name, chained context suppressed, malformed PIN without its
+    value, urllib3's URL-bearing DEBUG line kept off), then starts Tradehull in access_token mode. Checked first:
+    0 occurrences of `pin=` in the journal (since 28 Sep) or Tradehull's log files - it had never leaked.
+  - Token: dhanhq's OrderUpdate printed `Sent subscribe message: {...Token...}` on every connect - 50 journal lines
+    since 28 Sep. All those tokens are dead except the current one (expires 3 Oct 06:20 IST). The bot now runs its
+    own order-update session without the print.
+  - After deploy: Tradehull in ACCESS TOKEN mode reused the cached token, order-update WS connected, 0 token
+    prints, 0 `pin=`, 0 DH-906, session guard checking. Fake check 31/31; full suite = unchanged code.
+
+## Lesson (added)
+- **Read what third-party SDKs print.** Two credentials reached logs through vendor code (an exception text that
+  is a URL with the PIN in it; a debug print of the login message), not through ours.
