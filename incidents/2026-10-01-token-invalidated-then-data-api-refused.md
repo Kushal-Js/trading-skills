@@ -82,6 +82,21 @@ candles, no prices) until the Dhan Data API plan is renewed.
 - So the cause is neither the plan nor a stale token - it is on Dhan's side (something changed for the account
   around 1 Oct 22:47 IST, when every token was invalidated). Raised to the user to take up with DhanHQ support.
 
+## Public reports and Dhan's limits (researched 2 Oct ~08:45 IST)
+- **Multi-user Dhan-side outage:** MadeForTrade "DH-902 ERROR on active subscription" (posted 1 Oct 17:48 IST,
+  errors since ~15:48; >= 4 users, one plan also valid to 13 Oct) and "Dhan Data API suddenly stopped working
+  despite active subscription" (1 Oct 20:54 IST; NIFTY quote returning all-null error fields - our bot logged the
+  same at 23:59). No Dhan staff reply at the time of reading. Our timeline fits: the 06:48 token kept data until
+  Dhan invalidated it at 22:47; every token minted after that lacks data. Read-only test 2 Oct 08:20: a web.dhan.co
+  SELF token is refused the same way from the droplet AND another network -> not token type, not IP.
+- **Lockout:** Dhan staff on MadeForTrade (thread 56441): TOTP login errors appear "usually when 5 consecutive failed
+  attempts happen at the server". No published lock duration. Other limits: 25 consents/day (API-key flow), token
+  24 h, static IP only for order placement. 805 "Too many requests or connections. Further requests may result in
+  user being blocked" is a warning (thread 60693 cleared by throttling, no block).
+- **Our exposure:** 4 consecutive "Invalid TOTP" at 2 Oct 00:00 - one short of 5. The retry series built today (6
+  tries) plus the fallback's 15-min primary retries could cross 5 -> proposed: a persisted cap of 4 consecutive
+  failed tries, then pause PIN+TOTP and run on the fallback.
+
 ## Lesson (added)
 - **Read what third-party SDKs print.** Two credentials reached logs through vendor code (an exception text that
   is a URL with the PIN in it; a debug print of the login message), not through ours.
