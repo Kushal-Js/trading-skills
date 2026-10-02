@@ -97,6 +97,20 @@ candles, no prices) until the Dhan Data API plan is renewed.
   tries) plus the fallback's 15-min primary retries could cross 5 -> proposed: a persisted cap of 4 consecutive
   failed tries, then pause PIN+TOTP and run on the fallback.
 
+## Resolution (2 Oct 2026)
+- **Dhan restored data access between 08:44:40 IST (last DH-902) and 09:09 IST** - no action on our side changed it
+  (fresh tokens, a web token and another network had all been refused). Outage on our account: 1 Oct ~22:47 IST
+  (token invalidated) / 00:01 (DH-902) -> 2 Oct ~08:45 IST; other users from ~15:48 IST 1 Oct.
+- **4-try PIN+TOTP cap deployed `2c17a1d` 09:09 IST** (user request): one count for every process on the droplet,
+  no 5th consecutive failed login ever sent (Dhan locks at 5), 6 h pause then one try per pause, bot runs on the
+  fallback token or waits in-process meanwhile; `dhan_fallback_token.py login-reset` clears.
+- **Weekly watchlist refresh completed 09:14 IST** (8 failed attempts since 00:00): 213/213 scored; Unified
+  Momentum's real-money list +ABCAPITAL/ETERNAL/OBEROIRLTY/PAYTM/TVSMOTOR, -GLENMARK/KALYANKJIL/MANAPPURAM/PAGEIND/
+  SAIL; clean safe restart.
+- **What we have now that we lacked on 1 Oct:** in-process login retries, a 60 s token check with in-place re-login,
+  a stored fallback access token, Dhan's data-plan status + expiry warning in /feed-stats, a data probe + retry
+  timer for the weekly job, the 4-try cap, and no PIN / token in any log.
+
 ## Lesson (added)
 - **Read what third-party SDKs print.** Two credentials reached logs through vendor code (an exception text that
   is a URL with the PIN in it; a debug print of the login message), not through ours.
