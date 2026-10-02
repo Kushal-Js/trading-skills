@@ -71,6 +71,17 @@ candles, no prices) until the Dhan Data API plan is renewed.
   - After deploy: Tradehull in ACCESS TOKEN mode reused the cached token, order-update WS connected, 0 token
     prints, 0 `pin=`, 0 DH-906, session guard checking. Fake check 31/31; full suite = unchanged code.
 
+## 2 Oct 08:00 IST - the plan is active, data is still refused (Dhan-side)
+- The user renewed the Data API plan (auto-renewal on). `4447bdd` adds Dhan's own plan status to `/feed-stats`
+  (data_plan / data_validity / token_validity, from the 60 s profile check) and logs a warning when the plan is
+  not Active or ends within 3 days.
+- Deployed 08:00:32 IST with a forced fresh login (new token minted by the PIN-safe code on the first try).
+  Dhan's profile on that new token: **dataPlan "Active", dataValidity 2026-10-13 17:55:21**. Every data call on the
+  same token: **DH-902 / HTTP 451** "User has not subscribed to Data APIs or does not have access to Trading APIs";
+  market-data WebSocket HTTP 429; trading APIs fine.
+- So the cause is neither the plan nor a stale token - it is on Dhan's side (something changed for the account
+  around 1 Oct 22:47 IST, when every token was invalidated). Raised to the user to take up with DhanHQ support.
+
 ## Lesson (added)
 - **Read what third-party SDKs print.** Two credentials reached logs through vendor code (an exception text that
   is a URL with the PIN in it; a debug print of the login message), not through ours.
