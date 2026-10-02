@@ -88,6 +88,12 @@ evidence" links to the `designs/` doc where a real backtest exists;
 under that specific config to judge it (many recent rows are too new to
 judge yet - flagged explicitly).
 
+### 2 Oct 2026
+
+| Change | Strategy | Backtest evidence | Real PnL since |
+|---|---|---|---|
+| **Unified Momentum pre-launch audit fixes** (traderBoy `01a573a` + `3c952a8` + `8145496`, deployed 2 Oct 11:37 / 11:41 / 11:52 IST, flat, restart reports clean; user: "retest ... fix it, deploy the bot and restart as many times as we want"). (1) First 5-min bar of every session: the 60-day Bollinger REST base was refetched on every call and the UM/SB tick listeners re-forced a refresh every 3 s per stock (the "just-closed" 09:10 bar never exists) - now one request per bar + 60 s retry floor, listeners idle in the 09:15 bar (no entry is possible there, live or in the backtest). (2) Engine B could buy a put at 09:15 on the previous session's 15:25 cross - signal candle must now be today's (matches the backtest). (3) Engine B on its own loop (an exception in engine A's tick used to skip B, incl. its 15:15 square-off poll). (4) Restart adoption of a filled order reuses the stop already resting at Dhan (it used to add a second SELL stop). (5) /feed-stats history-call counters (per minute / caller / instrument) + executor-lag probe. learnings/um-audit-first-bar-stale-signal-restart-stop.md | Unified Momentum (real); shared Bollinger signal code (SB/Bollinger paper) | Fixes restore backtest parity (first bar, stale candle); fake replay 40/40 + 10 for the prepared executor flag; full suite identical before/after (663 passed / 6 failed both). | First trading day: Mon 5 Oct. Open: bar-start REST queue (~66-98 history calls per boundary through 2/s pacing; orders can wait ~2.5-3 s for an executor worker) - prepared `HISTORY_EXECUTOR_WORKERS` flag (`8145496`), off. Engine B stale-candle entries would have happened 4 times in 820 stock-days (3 Aug - 29 Sep, 20 stocks, cache replay). |
+
 ### 1 Oct 2026
 
 | Change | Strategy | Backtest evidence | Real PnL since |
