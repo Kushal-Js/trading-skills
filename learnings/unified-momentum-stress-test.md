@@ -55,3 +55,17 @@ The droplet's vCPU is 4.5× slower than the Mac on the same Python benchmark. CP
    `last`, not `close`. It has never fired live.
 
 Report: https://claude.ai/artifact/YVh7vwDKVuQPAKWnT65Xuo. Harness: traderBoy `.claude/test-wip/um_stress_harness/`.
+
+**Fixed and deployed 3 Oct 2026 21:42 IST (traderBoy `8b790bc`):**
+- Items 1–4 and 8 are fixed:
+  - The warm-up now loads every series Unified Momentum declares for every listed stock. After a restart it runs at once, Unified Momentum stocks only.
+  - Engine B warms cold stocks in the background.
+  - The contract is resolved before the trigger.
+  - A funds-refused put waits 60 s before the next try.
+  - The `forming["last"]` field name is fixed.
+- Measured in re-runs:
+  - Engine B's 09:20 pass: 7.8 s → 0.3 s.
+  - Trigger → order under stress: 3.9 s → 0.27 s.
+  - Engine B's worst pass after a restart: 209 s → 46 s.
+- Item 5 (capital) is the user's call; funds are being added 4 Oct.
+- Item 6 (the restart minute) remains bound by Dhan's pacing.
