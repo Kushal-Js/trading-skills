@@ -88,6 +88,12 @@ evidence" links to the `designs/` doc where a real backtest exists;
 under that specific config to judge it (many recent rows are too new to
 judge yet - flagged explicitly).
 
+### 3 Oct 2026
+
+| Change | Strategy | Backtest evidence | Real PnL since |
+|---|---|---|---|
+| **Stress-test fixes** (traderBoy `8b790bc`, deployed Sat 3 Oct 21:42 IST, safe_restart flat, both restart reports clean, 0 errors; user: "fix whatever is needed and deploy ... the fix should be automated for upcoming weeks also and all that is Should fix category also" after the end-to-end stress test, [[unified-momentum-stress-test]]). (1) Warm-up covers every Unified Momentum series for every stock on the current list (UM declares what engines A/B read) - the 2 Oct holiday file lacked Swing 15m/7d for 7 of 15 stocks, engine B would have downloaded them one by one at 09:20; after a mid-session restart it runs at once (UM stocks only, waits for UM's list, stands aside 25 s after each 5-min close, reads the file as found at start). (2) Engine B never blocks on a cold stock: skipped for the pass, warmed by one background task. (3) Engine A resolves the contract once the stock is within 0.3% of its BULLISH trigger, reused only while still ATM for the current price. (4) Funds + duplicate-order checks side by side (fund_allocation: margin + balance side by side). (5) A put refused for funds is not retried for 60 s (was every ~6 s). (6) Late-entry shadow KeyError 'close' (UM + SB). (7) reversal_filters index lookup + no shutdown tracebacks (log noise). | Unified Momentum (real) + shared plumbing (Swing/Bollinger signal cache, fund_allocation for every real package, Scalper log) | No strategy rule changed. Stress harness (real app, fake Dhan, sim Mon 5 Oct), before -> after: engine B 09:20 pass 7.8 s -> 0.3 s; engine A trigger -> order 3.9 s -> 0.27 s under stress (1.2 s baseline before); engine B worst pass after a mid-session restart (45 stocks) 209 s -> 46 s; errors logged in the stress run 33 -> 2. Restart minute still REST-bound (first bar's pending orders median ~25 s with 45 stocks). Dry run on the live file: Monday 09:05 adds exactly the 7 missing bases. Fake checks 55/55 new + 51/52/63/93/16/3; full suite identical to c3d0864 (597 / same 15 failures, no .env). | Mon 5 Oct: GET /official-candles prewarm.added_bases = 7; /unified-momentum/engine-b warm_up + funds_backoff; /unified-momentum/positions contracts_prepared (prepared/used/stale). |
+
 ### 2 Oct 2026
 
 | Change | Strategy | Backtest evidence | Real PnL since |
