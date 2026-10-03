@@ -34,3 +34,22 @@ Exit mix, net after costs: Supertrend close 224 trades -61.4k; max loss 54 trade
 - **Too many trades:** the 14.5-hour MCX session plus a 1-min Supertrend gives ~15 trades a day (BANKNIFTY: ~5). At ~Rs 210 per round trip, costs alone are ~Rs 3,100 a day.
 - **Stops too tight for crude:** the BANKNIFTY rupee limits on a 100-bbl lot make max loss only 15 points on a ~Rs 416 premium (3.6%), so crude's normal 1-min noise hits it.
 - **No signal edge:** even before costs, the 312 trades net to about zero.
+
+## Follow-up: same logic on 5-min candles (user, 3 Oct)
+
+Same script with `FAST_MIN=5`: signals, Supertrend line and re-entry all use closed 5-min candles anchored at 09:00. The 15-min layer, limits and option-price exits are unchanged. Cache only.
+
+| | 1-min (live logic) | 5-min |
+|---|---:|---:|
+| Trades | 312 | **68** |
+| Won | 91 (29%) | 24 (35%) |
+| Gross before costs | -3,142 | **+2,496** |
+| Costs | 65,639 | 14,300 |
+| **Net** | **-68,781** | **-11,802** |
+| Positive days | 4/21 | 6/21 |
+| Best / worst day | +10,551 / -10,216 | +6,634 / -4,473 |
+| Max drawdown | -63,408 | -20,933 |
+
+**5-min exit mix:** max loss 42 trades -77.2k, profit protection 22 trades +61.9k, square-off 2 trades +4.6k, Supertrend close 2 trades -1.1k. The Rs 1,500 (15-point) stop decides almost every losing trade; the 5-min Supertrend exit barely gets a chance.
+
+**Takeaway:** 5-min cuts the trade count by 4.6x and turns gross slightly positive, but net is still negative after costs. The max-loss level, not the signal, is now the binding rule. Any next test (a crude-sized stop) is in-sample on 21 days.
