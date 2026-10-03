@@ -51,3 +51,30 @@ The 5-min win (13 trades) is too few to mean anything.
 - **Smoothed HA is a doubly smoothed moving average of price, so it is a lagging trend display.** The pullback + engulfing timing does not beat entering on the flip, and neither has an edge after costs.
 - **The "6 figures per trade" claim is not supported.**
 - **Possible use:** as a chart readability aid only. Any use as a filter inside an existing strategy would need its own test (past filter add-ons here mostly cut profit).
+
+## Follow-up: as a trend filter inside Unified Momentum (user, 3 Oct)
+
+The user believed it works best on short timeframes (5-min or lower).
+
+Setup: deployed UM config, walk-forward lists, 3 Aug - 1 Oct (43 sessions), cache only (scratch `um_ha.py`). A call (engine A) is entered only if the stock's last CLOSED HA candle is green; a put (engine B) only if it is red.
+
+| Filter | Total | vs deployed | Aug | Sep | Signals blocked (A / B) |
+|---|---:|---:|---:|---:|---:|
+| None (deployed) | +149,360 | - | +57,927 | +91,434 | - |
+| SHA 1-min | +82,382 | **-66,978** | -17.7k | -49.3k | 45 / 69 |
+| SHA 3-min | +121,718 | -27,642 | -3.8k | -23.8k | 5 / 68 |
+| SHA 5-min | +156,429 | +7,069 | +2.2k | +4.9k | 2 / 68 |
+| SHA 5-min, calls only | +158,436 | +9,076 | +2.2k | +6.9k | 2 / 0 |
+| SHA 5-min, puts only | +147,352 | -2,008 | 0 | -2.0k | 0 / 68 |
+| SHA 1-min, puts only | +151,969 | +2,609 | 0 | +2.6k | 0 / 69 |
+| Fast SHA (6/2) 1-min | +106,881 | -42,479 | +5.7k | -48.2k | 29 / 68 |
+| Fast SHA (6/2) 5-min | +130,410 | -18,950 | +1.0k | -19.9k | 19 / 67 |
+| Classic HA 5-min | +68,843 | -80,517 | -25.0k | -55.5k | 52 / 69 |
+| Classic HA 1-min | +138,207 | -11,153 | +4.1k | -15.3k | 25 / 64 |
+
+**Why:**
+- **Shorter is worse, not better.** Engine A buys the breakout right after a pullback. During that pullback the 1-min HA is red, so the filter blocks the best entries: 29 traded calls worth +67k, including the +26,288 / +16,817 / +15,399 winners.
+- **On 5-min the SHA is almost always already green when A triggers** - it blocked only 2 calls in 43 sessions (HAL -2,225, PAYTM -6,851). That +9k is two trades: chance, not evidence.
+- **For engine B** the filter blocks over half the put signals but moves P&L by only about +-2.5k (no information).
+
+**Verdict:** do not add an HA filter to UM. At most, log the 5-min SHA colour at each real entry (shadow) to gather out-of-sample evidence.
