@@ -33,3 +33,31 @@ Over 3 years (Sep 2023 - Sep 2026) every rule was also negative hedged (-0.16L t
 - **Unhedged is not the answer:** a single week can lose Rs 1.3L per lot.
 - **Capital:** a median F&O lot is ~Rs 6L. The future margin (~Rs 1-1.5L) plus the put means two stocks need roughly Rs 3L or more; Rs 1.2L covers one at a time.
 - **Not tested yet:** a cheaper hedge (OTM put or put spread) and longer holds (less decay per rupee of move).
+
+## Follow-up: cheaper and dip-triggered hedges (user, 3 Oct)
+
+Same last-year picks, entry/exit on 1-hour closes (96 trades per rule; 8 weeks had no hourly data). Put prices modelled as above.
+
+- **Dip hedge:** hold the future unhedged. When the 1-hour close is below the entry price AND the 1-hour Supertrend(10,3) is bearish, buy ATM puts (1 lot, or 2 lots, which is about delta-neutral). Sell them when the Supertrend turns bullish. This can repeat in the week; it averaged 0.74 hedges per trade.
+- **Cross-check:** the ATM-put baseline on hourly prices was -86.5k vs -75.9k on daily prices for the same trades.
+
+Top 2 by 3-month gain (Rs, 1 lot each, 2 trades a week):
+
+| Hedge | Year | Profitable | Worst trade | Max dd |
+|---|---:|---:|---:|---:|
+| None | +186,842 | 54% | -130,535 | -361,718 |
+| ATM put held all week | -86,502 | 43% | -64,744 | -223,604 |
+| Put 3% below | -33,913 | 47% | -75,511 | -262,568 |
+| Put 5% below | -3,430 | 48% | -82,776 | -286,338 |
+| Put spread ATM / -5% | +6,692 | 52% | -115,807 | -332,483 |
+| **Dip hedge, 1 put lot** | **+148,753** | 45% | -102,274 | -310,946 |
+| **Dip hedge, 2 put lots** | **+114,015** | 41% | **-73,966** | -269,310 |
+
+"Clean uptrend" picks are about the same.
+
+**Random picks lose with every hedge** (-2.1L unhedged, -2.7L / -3.2L with dip hedges). The dip hedge does not create an edge; it only gives up less of the pick edge than a fixed put.
+
+**Takeaways:**
+- The dip hedge costs ~38k (1 lot) / ~73k (2 lots) of the unhedged profit and cuts the worst trade from -1.31L to -1.02L / -0.74L.
+- A fixed ATM put cuts the worst trade the most (-0.65L) but costs 2.7L.
+- Biggest caveat: real puts get dearer right after a fall (IV jumps); the model keeps IV flat, so the dip hedge is flattered. Validate with real stock-option data (Dhan rolling OPTSTK) before relying on it.
