@@ -53,3 +53,27 @@ Same script with `FAST_MIN=5`: signals, Supertrend line and re-entry all use clo
 **5-min exit mix:** max loss 42 trades -77.2k, profit protection 22 trades +61.9k, square-off 2 trades +4.6k, Supertrend close 2 trades -1.1k. The Rs 1,500 (15-point) stop decides almost every losing trade; the 5-min Supertrend exit barely gets a chance.
 
 **Takeaway:** 5-min cuts the trade count by 4.6x and turns gross slightly positive, but net is still negative after costs. The max-loss level, not the signal, is now the binding rule. Any next test (a crude-sized stop) is in-sample on 21 days.
+
+## Follow-up 2: wider limits - max loss Rs 3,000, daily stop Rs 5,000 (user, 3 Oct)
+
+Profit protection (above Rs 3,000, 2% giveback), the Supertrend candle-close exit and everything else unchanged. Cache only (`ML_RS=3000 DAILY_RS=5000`).
+
+| | 5-min | 1-min |
+|---|---:|---:|
+| Trades | 71 | 363 |
+| Won | 37 (52%) | 111 (31%) |
+| Gross | +14,307 | +2,133 |
+| Costs | 15,007 | 75,957 |
+| **Net** | **-703** | **-73,824** |
+| Positive days | 11/21 | 4/21 |
+| Best / worst day | +8,056 / -6,665 | +14,141 / -12,288 |
+| Max drawdown | **-28,586** | -65,894 |
+| Daily stop hit | 4 days | 10 days |
+
+**5-min exit mix:** max loss 24 trades -80.3k; profit protection 34 trades +93.6k; Supertrend close 7 trades -14.3k; square-off 5 trades +3.2k; hard stop 1 trade -2.9k.
+
+**Halves:** 3-16 Sep +2,531; 17 Sep - 1 Oct -3,234.
+
+**Gap risk:** the worst single trade was -6,403 despite the 3,000 max loss (the price gapped through the stop inside a minute).
+
+**Takeaway:** 5-min with a crude-sized stop is about break-even (gross edge ~ costs) and is flat in both halves. The wider stop deepens the drawdown (-28.6k over 11-21 Sep). 1-min stays deeply negative on costs. No version tested so far makes money on CRUDEOIL.
